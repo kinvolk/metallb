@@ -187,8 +187,11 @@ def dev_env(ctx, architecture="amd64", name="kind", cni=None):
             tmp.flush()
             run("kind create cluster --name={} --config={}".format(name, tmp.name), pty=True, echo=True)
 
-    config = run("kind get kubeconfig-path --name={}".format(name), hide=True).stdout.strip()
-    env = {"KUBECONFIG": config}
+    kubeconfig = run("kind get kubeconfig --name={}".format(name), hide=True).stdout
+    kubeconfig_file = tempfile.NamedTemporaryFile(delete=False)
+    kubeconfig_file.write(kubeconfig.encode("utf-8"))
+    kubeconfig_file.flush()
+    env = {"KUBECONFIG": kubeconfig_file.name}
     if mk_cluster and cni:
         run("kubectl apply -f e2etest/manifests/{}.yaml".format(cni), echo=True, env=env)
 
@@ -220,7 +223,9 @@ def dev_env(ctx, architecture="amd64", name="kind", cni=None):
 To access the cluster:
 
 export KUBECONFIG={}
-""".format(config))
+""".format(kubeconfig_file.name))
+
+    kubeconfig_file.close()
 
 # @task
 # def client_machine(ctx, architecture="amd64", name="kind"):
