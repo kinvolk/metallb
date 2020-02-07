@@ -25,7 +25,7 @@ import (
 
 	"go.universe.tf/metallb/internal/bgp"
 	"go.universe.tf/metallb/internal/config"
-	"k8s.io/api/core/v1"
+	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/labels"
 
 	"github.com/go-kit/kit/log"
@@ -167,6 +167,7 @@ func (c *bgpController) syncPeers(l log.Logger) error {
 				break
 			}
 		}
+		l.Log("peer", p.cfg.Addr, "shouldRun", shouldRun, "nodeLabels", c.nodeLabels, "NodeSelectors", p.cfg.NodeSelectors)
 
 		// Now, compare current state to intended state, and correct.
 		if p.bgp != nil && !shouldRun {
@@ -272,6 +273,27 @@ type session interface {
 func (c *bgpController) SetLeader(log.Logger, bool) {}
 
 func (c *bgpController) SetNode(l log.Logger, node *v1.Node) error {
+	nodeAnnotations := node.Annotations
+	if nodeAnnotations == nil {
+		nodeAnnotations = map[string]string{}
+	}
+	l.Log("peers", c.peers)
+	for k, v := range nodeAnnotations {
+		if k == "metallb.universe.tf/peer-address" {
+			l.Log("event", "foundPeerAnnotation", "ip", v)
+			p := &peer{
+				cfg: &config.Peer{
+					ASN:           65001,
+					Addr:          net.ParseIP(v),
+					MyASN:         65000,
+					NodeSelectors: []labels.Selector{labels.Everything()},
+					Port:          179,
+				},
+			}
+			c.peers = append(c.peers, p)
+		}
+	}
+
 	nodeLabels := node.Labels
 	if nodeLabels == nil {
 		nodeLabels = map[string]string{}
