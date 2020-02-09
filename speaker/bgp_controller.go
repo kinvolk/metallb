@@ -15,6 +15,7 @@
 package main
 
 import (
+	"errors"
 	"fmt"
 	"io"
 	"net"
@@ -273,25 +274,13 @@ type session interface {
 func (c *bgpController) SetLeader(log.Logger, bool) {}
 
 func (c *bgpController) SetNode(l log.Logger, node *v1.Node) error {
-	nodeAnnotations := node.Annotations
-	if nodeAnnotations == nil {
-		nodeAnnotations = map[string]string{}
+	p, err := peerFromAnnotations(l, node)
+	if err != nil {
+		l.Log("op", "setNode", "error", err, "msg", "parsing peer from annotations")
 	}
-	l.Log("peers", c.peers)
-	for k, v := range nodeAnnotations {
-		if k == "metallb.universe.tf/peer-address" {
-			l.Log("event", "foundPeerAnnotation", "ip", v)
-			p := &peer{
-				cfg: &config.Peer{
-					ASN:           65001,
-					Addr:          net.ParseIP(v),
-					MyASN:         65000,
-					NodeSelectors: []labels.Selector{labels.Everything()},
-					Port:          179,
-				},
-			}
-			c.peers = append(c.peers, p)
-		}
+	// TODO: Don't create a peer if annotations didn't change.
+	if p != nil {
+		c.peers = append(c.peers, p)
 	}
 
 	nodeLabels := node.Labels
@@ -306,6 +295,63 @@ func (c *bgpController) SetNode(l log.Logger, node *v1.Node) error {
 	c.nodeLabels = ns
 	l.Log("event", "nodeLabelsChanged", "msg", "Node labels changed, resyncing BGP peers")
 	return c.syncPeers(l)
+}
+
+// peerFromAnnotations looks for annotations on a node and attempts to create a
+// peer from them.
+func peerFromAnnotations(l log.Logger, node *v1.Node) (*peer, error) {
+	var peerASN uint32
+	var peerAddr net.IP
+	var myASN uint32
+
+	for k, v := range node.Annotations {
+		switch k {
+		case "metallb.universe.tf/peer-asn":
+			asn, err := strconv.ParseUint(v, 10, 32)
+			if err != nil {
+				return nil, fmt.Errorf("parsing peer ASN: %v", err)
+			}
+			peerASN = uint32(asn)
+		case "metallb.universe.tf/peer-address":
+			peerAddr = net.ParseIP(v)
+			if peerAddr == nil {
+				return nil, errors.New("nil peer address")
+			}
+		case "metallb.universe.tf/my-asn":
+			asn, err := strconv.ParseUint(v, 10, 32)
+			if err != nil {
+				return nil, fmt.Errorf("parsing ASN: %v", err)
+			}
+			myASN = uint32(asn)
+		}
+	}
+
+	if peerASN == 0 || peerAddr == nil || myASN == 0 {
+		return nil, errors.New("invalid peer configuration")
+	}
+
+	// The peer is configured on a specific node object, so we want to create a
+	// BGP session only on that node.
+	h := node.Labels["kubernetes.io/hostname"]
+	if h == "" {
+		return nil, errors.New("label kubernetes.io/hostname not found on node")
+	}
+	ns, err := labels.Parse(fmt.Sprintf("kubernetes.io/hostname=%s", h))
+	if err != nil {
+		return nil, fmt.Errorf("parsing node selector: %v", err)
+	}
+
+	p := &peer{
+		cfg: &config.Peer{
+			ASN:           peerASN,
+			Addr:          peerAddr,
+			MyASN:         myASN,
+			NodeSelectors: []labels.Selector{ns},
+			Port:          179,
+		},
+	}
+
+	return p, nil
 }
 
 var newBGP = func(logger log.Logger, addr string, myASN uint32, routerID net.IP, asn uint32, hold time.Duration, password string, myNode string) (session, error) {
