@@ -274,15 +274,6 @@ type session interface {
 func (c *bgpController) SetLeader(log.Logger, bool) {}
 
 func (c *bgpController) SetNode(l log.Logger, node *v1.Node) error {
-	p, err := peerFromAnnotations(l, node)
-	if err != nil {
-		l.Log("op", "setNode", "error", err, "msg", "parsing peer from annotations")
-	}
-	// TODO: Don't create a peer if annotations didn't change.
-	if p != nil {
-		c.peers = append(c.peers, p)
-	}
-
 	nodeLabels := node.Labels
 	if nodeLabels == nil {
 		nodeLabels = map[string]string{}
@@ -290,21 +281,31 @@ func (c *bgpController) SetNode(l log.Logger, node *v1.Node) error {
 	ns := labels.Set(nodeLabels)
 	if c.nodeLabels != nil && labels.Equals(c.nodeLabels, ns) {
 		// Node labels unchanged, no action required.
+		l.Log("op", "setNode", "msg", "node labels unchanged")
 		return nil
 	}
 	c.nodeLabels = ns
+
+	p, err := peerFromLabels(l, node)
+	if err != nil {
+		l.Log("op", "setNode", "error", err, "msg", "parsing BGP peer from labels")
+	}
+	if p != nil {
+		c.peers = append(c.peers, p)
+	}
+
 	l.Log("event", "nodeLabelsChanged", "msg", "Node labels changed, resyncing BGP peers")
 	return c.syncPeers(l)
 }
 
-// peerFromAnnotations looks for annotations on a node and attempts to create a
+// peerFromLabels looks for labels on a node and attempts to create a
 // peer from them.
-func peerFromAnnotations(l log.Logger, node *v1.Node) (*peer, error) {
+func peerFromLabels(l log.Logger, node *v1.Node) (*peer, error) {
 	var peerASN uint32
 	var peerAddr net.IP
 	var myASN uint32
 
-	for k, v := range node.Annotations {
+	for k, v := range node.Labels {
 		switch k {
 		case "metallb.universe.tf/peer-asn":
 			asn, err := strconv.ParseUint(v, 10, 32)
