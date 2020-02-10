@@ -32,6 +32,12 @@ import (
 	"github.com/go-kit/kit/log"
 )
 
+const (
+	labelMyASN       = "metallb.universe.tf/my-asn"
+	labelPeerASN     = "metallb.universe.tf/peer-asn"
+	labelPeerAddress = "metallb.universe.tf/peer-address"
+)
+
 type peer struct {
 	cfg *config.Peer
 	bgp session
@@ -305,23 +311,23 @@ func peerFromLabels(l log.Logger, node *v1.Node) (*peer, error) {
 
 	for k, v := range node.Labels {
 		switch k {
-		case "metallb.universe.tf/peer-asn":
-			asn, err := strconv.ParseUint(v, 10, 32)
-			if err != nil {
-				return nil, fmt.Errorf("parsing peer ASN: %v", err)
-			}
-			peerASN = uint32(asn)
-		case "metallb.universe.tf/peer-address":
-			peerAddr = net.ParseIP(v)
-			if peerAddr == nil {
-				return nil, errors.New("nil peer address")
-			}
-		case "metallb.universe.tf/my-asn":
+		case labelMyASN:
 			asn, err := strconv.ParseUint(v, 10, 32)
 			if err != nil {
 				return nil, fmt.Errorf("parsing ASN: %v", err)
 			}
 			myASN = uint32(asn)
+		case labelPeerASN:
+			asn, err := strconv.ParseUint(v, 10, 32)
+			if err != nil {
+				return nil, fmt.Errorf("parsing peer ASN: %v", err)
+			}
+			peerASN = uint32(asn)
+		case labelPeerAddress:
+			peerAddr = net.ParseIP(v)
+			if peerAddr == nil {
+				return nil, errors.New("nil peer address")
+			}
 		}
 	}
 
