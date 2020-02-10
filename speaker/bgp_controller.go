@@ -300,6 +300,7 @@ func (c *bgpController) SetNode(l log.Logger, node *v1.Node) error {
 	}
 	c.nodeLabels = ns
 
+	// Attempt to create a BGP peer from node labels.
 	p, err := peerFromLabels(l, node)
 	if err != nil {
 		l.Log("op", "setNode", "error", err, "msg", "parsing BGP peer from labels")
