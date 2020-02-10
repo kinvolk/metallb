@@ -33,6 +33,7 @@ import (
 )
 
 const (
+	labelHostname    = "kubernetes.io/hostname"
 	labelMyASN       = "metallb.universe.tf/my-asn"
 	labelPeerASN     = "metallb.universe.tf/peer-asn"
 	labelPeerAddress = "metallb.universe.tf/peer-address"
@@ -337,11 +338,11 @@ func peerFromLabels(l log.Logger, node *v1.Node) (*peer, error) {
 
 	// The peer is configured on a specific node object, so we want
 	// to create a BGP session only on that node.
-	h := node.Labels["kubernetes.io/hostname"]
+	h := node.Labels[labelHostname]
 	if h == "" {
-		return nil, errors.New("label kubernetes.io/hostname not found on node")
+		return nil, fmt.Errorf("label %s not found on node", labelHostname)
 	}
-	ns, err := labels.Parse(fmt.Sprintf("kubernetes.io/hostname=%s", h))
+	ns, err := labels.Parse(fmt.Sprintf("%s=%s", labelHostname, h))
 	if err != nil {
 		return nil, fmt.Errorf("parsing node selector: %v", err)
 	}
