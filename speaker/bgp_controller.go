@@ -335,8 +335,8 @@ func peerFromLabels(l log.Logger, node *v1.Node) (*peer, error) {
 		return nil, errors.New("invalid peer configuration")
 	}
 
-	// The peer is configured on a specific node object, so we want to create a
-	// BGP session only on that node.
+	// The peer is configured on a specific node object, so we want
+	// to create a BGP session only on that node.
 	h := node.Labels["kubernetes.io/hostname"]
 	if h == "" {
 		return nil, errors.New("label kubernetes.io/hostname not found on node")
