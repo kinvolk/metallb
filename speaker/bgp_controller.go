@@ -168,7 +168,6 @@ func (c *bgpController) syncPeers(l log.Logger) error {
 				break
 			}
 		}
-		l.Log("peer", p.cfg.Addr, "shouldRun", shouldRun, "nodeLabels", c.nodeLabels, "NodeSelectors", p.cfg.NodeSelectors)
 
 		// Now, compare current state to intended state, and correct.
 		if p.bgp != nil && !shouldRun {
@@ -281,7 +280,6 @@ func (c *bgpController) SetNode(l log.Logger, node *v1.Node) error {
 	ns := labels.Set(nodeLabels)
 	if c.nodeLabels != nil && labels.Equals(c.nodeLabels, ns) {
 		// Node labels unchanged, no action required.
-		l.Log("op", "setNode", "msg", "node labels unchanged")
 		return nil
 	}
 	c.nodeLabels = ns
