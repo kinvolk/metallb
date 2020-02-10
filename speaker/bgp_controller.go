@@ -304,7 +304,7 @@ func (c *bgpController) SetNode(l log.Logger, node *v1.Node) error {
 }
 
 // peerFromLabels looks for labels on a node and attempts to create a
-// peer from them.
+// BGP peer from them.
 func peerFromLabels(l log.Logger, node *v1.Node) (*peer, error) {
 	var peerASN uint32
 	var peerAddr net.IP
