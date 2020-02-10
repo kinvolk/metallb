@@ -315,16 +315,20 @@ func (c *bgpController) SetNode(l log.Logger, node *v1.Node) error {
 // peerFromLabels looks for labels on a node and attempts to create a
 // BGP peer from them.
 func peerFromLabels(l log.Logger, node *v1.Node) (*peer, error) {
+	var myASN uint32
 	var peerASN uint32
 	var peerAddr net.IP
-	var myASN uint32
+	var peerPort uint16
+	var holdTime time.Duration
+	var routerID net.IP
+	var password string
 
 	for k, v := range node.Labels {
 		switch k {
 		case labelMyASN:
 			asn, err := strconv.ParseUint(v, 10, 32)
 			if err != nil {
-				return nil, fmt.Errorf("parsing ASN: %v", err)
+				return nil, fmt.Errorf("parsing local ASN: %v", err)
 			}
 			myASN = uint32(asn)
 		case labelPeerASN:
@@ -336,13 +340,38 @@ func peerFromLabels(l log.Logger, node *v1.Node) (*peer, error) {
 		case labelPeerAddress:
 			peerAddr = net.ParseIP(v)
 			if peerAddr == nil {
-				return nil, errors.New("nil peer address")
+				return nil, fmt.Errorf("invalid peer IP %q", v)
 			}
+		case labelPeerPort:
+			port, err := strconv.ParseUint(v, 10, 16)
+			if err != nil {
+				return nil, fmt.Errorf("parsing peer port: %v", err)
+			}
+			peerPort = uint16(port)
+		case labelHoldTime:
+			ht, err := parseHoldTime(v)
+			if err != nil {
+				return nil, fmt.Errorf("parsing hold time: %v", err)
+			}
+			holdTime = ht
+		case labelRouterID:
+			routerID = net.ParseIP(v)
+			if routerID == nil {
+				return nil, fmt.Errorf("invalid router ID %q", v)
+			}
+		case labelPassword:
+			password = v
 		}
 	}
 
+	// Verify required peer config.
 	if peerASN == 0 || peerAddr == nil || myASN == 0 {
 		return nil, errors.New("invalid peer configuration")
+	}
+
+	// Set defaults.
+	if peerPort == 0 {
+		peerPort = 179
 	}
 
 	// The peer is configured on a specific node object, so we want
@@ -358,15 +387,34 @@ func peerFromLabels(l log.Logger, node *v1.Node) (*peer, error) {
 
 	p := &peer{
 		cfg: &config.Peer{
+			MyASN:         myASN,
 			ASN:           peerASN,
 			Addr:          peerAddr,
-			MyASN:         myASN,
+			Port:          peerPort,
+			HoldTime:      holdTime,
+			RouterID:      routerID,
 			NodeSelectors: []labels.Selector{ns},
-			Port:          179,
+			Password:      password,
 		},
 	}
 
 	return p, nil
+}
+
+// TODO: Copied as-is from config package. Need to refactor to make this DRY.
+func parseHoldTime(ht string) (time.Duration, error) {
+	if ht == "" {
+		return 90 * time.Second, nil
+	}
+	d, err := time.ParseDuration(ht)
+	if err != nil {
+		return 0, fmt.Errorf("invalid hold time %q: %s", ht, err)
+	}
+	rounded := time.Duration(int(d.Seconds())) * time.Second
+	if rounded != 0 && rounded < 3*time.Second {
+		return 0, fmt.Errorf("invalid hold time %q: must be 0 or >=3s", ht)
+	}
+	return rounded, nil
 }
 
 var newBGP = func(logger log.Logger, addr string, myASN uint32, routerID net.IP, asn uint32, hold time.Duration, password string, myNode string) (session, error) {
