@@ -33,10 +33,19 @@ import (
 )
 
 const (
-	labelHostname    = "kubernetes.io/hostname"
-	labelMyASN       = "metallb.universe.tf/my-asn"
-	labelPeerASN     = "metallb.universe.tf/peer-asn"
+	// K8s labels which express node-specific BGP peer configuration.
+	labelHoldTime = "metallb.universe.tf/hold-time"
+	labelMyASN    = "metallb.universe.tf/my-asn"
+	// TODO: Using this label will display the password in clear text
+	// on the Node object.
+	labelPassword    = "metallb.universe.tf/password"
 	labelPeerAddress = "metallb.universe.tf/peer-address"
+	labelPeerASN     = "metallb.universe.tf/peer-asn"
+	labelPeerPort    = "metallb.universe.tf/peer-port"
+	labelRouterID    = "metallb.universe.tf/router-id"
+
+	// Well-known k8s label which allows selecting nodes by hostname.
+	labelHostname = "kubernetes.io/hostname"
 )
 
 type peer struct {
