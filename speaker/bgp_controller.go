@@ -57,6 +57,7 @@ type bgpController struct {
 	logger     log.Logger
 	myNode     string
 	nodeLabels labels.Set
+	nodePeers  []*peer
 	peers      []*peer
 	svcAds     map[string][]*bgp.Advertisement
 }
@@ -170,11 +171,34 @@ func (c *bgpController) ShouldAnnounce(l log.Logger, name string, svc *v1.Servic
 // Called when either the peer list or node labels have changed,
 // implying that the set of running BGP sessions may need tweaking.
 func (c *bgpController) syncPeers(l log.Logger) error {
-	var (
-		errs          int
-		needUpdateAds bool
-	)
-	for _, p := range c.peers {
+	var totalErrs int
+	var needUpdateAds int
+
+	update, errs := c.syncBGPSessions(l, c.peers)
+	needUpdateAds += update
+	totalErrs += errs
+	l.Log("op", "syncBGPSessions", "needUpdate", update, "errs", errs, "msg", "done syncing peer BGP sessions")
+
+	update, errs = c.syncBGPSessions(l, c.nodePeers)
+	needUpdateAds += update
+	totalErrs += errs
+	l.Log("op", "syncBGPSessions", "needUpdate", update, "errs", errs, "msg", "done syncing node peer BGP sessions")
+
+	if needUpdateAds > 0 {
+		// Some new sessions came up, resync advertisement state.
+		if err := c.updateAds(); err != nil {
+			l.Log("op", "updateAds", "error", err, "msg", "failed to update BGP advertisements")
+			return err
+		}
+	}
+	if errs > 0 {
+		return fmt.Errorf("%d BGP sessions failed to start", errs)
+	}
+	return nil
+}
+
+func (c *bgpController) syncBGPSessions(l log.Logger, peers []*peer) (needUpdateAds int, errs int) {
+	for _, p := range peers {
 		// First, determine if the peering should be active for this
 		// node.
 		shouldRun := false
@@ -190,7 +214,7 @@ func (c *bgpController) syncPeers(l log.Logger) error {
 			// Oops, session is running but shouldn't be. Shut it down.
 			l.Log("event", "peerRemoved", "peer", p.cfg.Addr, "reason", "filteredByNodeSelector", "msg", "peer deconfigured, closing BGP session")
 			if err := p.bgp.Close(); err != nil {
-				l.Log("op", "syncPeers", "error", err, "peer", p.cfg.Addr, "msg", "failed to shut down BGP session")
+				l.Log("op", "syncBGPSessions", "error", err, "peer", p.cfg.Addr, "msg", "failed to shut down BGP session")
 			}
 			p.bgp = nil
 		} else if p.bgp == nil && shouldRun {
@@ -203,25 +227,15 @@ func (c *bgpController) syncPeers(l log.Logger) error {
 			}
 			s, err := newBGP(c.logger, net.JoinHostPort(p.cfg.Addr.String(), strconv.Itoa(int(p.cfg.Port))), p.cfg.MyASN, routerID, p.cfg.ASN, p.cfg.HoldTime, p.cfg.Password, c.myNode)
 			if err != nil {
-				l.Log("op", "syncPeers", "error", err, "peer", p.cfg.Addr, "msg", "failed to create BGP session")
+				l.Log("op", "syncBGPSessions", "error", err, "peer", p.cfg.Addr, "msg", "failed to create BGP session")
 				errs++
 			} else {
 				p.bgp = s
-				needUpdateAds = true
+				needUpdateAds++
 			}
 		}
 	}
-	if needUpdateAds {
-		// Some new sessions came up, resync advertisement state.
-		if err := c.updateAds(); err != nil {
-			l.Log("op", "updateAds", "error", err, "msg", "failed to update BGP advertisements")
-			return err
-		}
-	}
-	if errs > 0 {
-		return fmt.Errorf("%d BGP sessions failed to start", errs)
-	}
-	return nil
+	return
 }
 
 func (c *bgpController) SetBalancer(l log.Logger, name string, lbIP net.IP, pool *config.Pool) error {
@@ -306,7 +320,7 @@ func (c *bgpController) SetNode(l log.Logger, node *v1.Node) error {
 		l.Log("op", "setNode", "error", err, "msg", "parsing BGP peer from labels")
 	}
 	if p != nil {
-		c.peers = append(c.peers, p)
+		c.nodePeers = append(c.nodePeers, p)
 	}
 
 	l.Log("event", "nodeLabelsChanged", "msg", "Node labels changed, resyncing BGP peers")
