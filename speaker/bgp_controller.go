@@ -57,7 +57,7 @@ type bgpController struct {
 	logger     log.Logger
 	myNode     string
 	nodeLabels labels.Set
-	nodePeers  []*peer
+	nodePeers  map[string]*peer
 	peers      []*peer
 	svcAds     map[string][]*bgp.Advertisement
 }
@@ -174,12 +174,18 @@ func (c *bgpController) syncPeers(l log.Logger) error {
 	var totalErrs int
 	var needUpdateAds int
 
+	// Update peer BGP sessions.
 	update, errs := c.syncBGPSessions(l, c.peers)
 	needUpdateAds += update
 	totalErrs += errs
 	l.Log("op", "syncBGPSessions", "needUpdate", update, "errs", errs, "msg", "done syncing peer BGP sessions")
 
-	update, errs = c.syncBGPSessions(l, c.nodePeers)
+	// Update node peer BGP sessions.
+	var np []*peer
+	for _, p := range c.nodePeers {
+		np = append(np, p)
+	}
+	update, errs = c.syncBGPSessions(l, np)
 	needUpdateAds += update
 	totalErrs += errs
 	l.Log("op", "syncBGPSessions", "needUpdate", update, "errs", errs, "msg", "done syncing node peer BGP sessions")
@@ -318,9 +324,35 @@ func (c *bgpController) SetNode(l log.Logger, node *v1.Node) error {
 	p, err := peerFromLabels(l, node)
 	if err != nil {
 		l.Log("op", "setNode", "error", err, "msg", "parsing BGP peer from labels")
-	}
-	if p != nil {
-		c.nodePeers = append(c.nodePeers, p)
+		// Node has invalid/partial/missing peer config. If a BGP
+		// peer exists for this node, we need to remove it.
+		if ep, exists := c.nodePeers[node.Name]; exists {
+			l.Log("event", "peerRemoved", "node", node.Name, "peer", ep.cfg.Addr, "reason", "noValidNodePeerConfig", "msg", "peer deconfigured, closing BGP session")
+			var bgpCloseFailed bool
+			if ep.bgp != nil {
+				if err := ep.bgp.Close(); err != nil {
+					l.Log("op", "setNode", "error", err, "peer", ep.cfg.Addr, "msg", "failed to shut down BGP session")
+					bgpCloseFailed = true
+				}
+			}
+			if !bgpCloseFailed {
+				// Delete peer unless we couldn't clear its BGP session.
+				delete(c.nodePeers, node.Name)
+			}
+		}
+	} else {
+		if _, exists := c.nodePeers[node.Name]; exists {
+			// Peer exists. Ensure its config is up to date.
+			if !reflect.DeepEqual(p.cfg, c.nodePeers[node.Name].cfg) {
+				// Peer has an outdated config. Update it.
+				l.Log("op", "setNode", "node", node.Name, "msg", "updating node peer config")
+				c.nodePeers[node.Name].cfg = p.cfg
+			}
+		} else {
+			// Peer doesn't exist. Create it.
+			l.Log("op", "setNode", "node", node.Name, "msg", "creating node peer")
+			c.nodePeers[node.Name] = p
+		}
 	}
 
 	l.Log("event", "nodeLabelsChanged", "msg", "Node labels changed, resyncing BGP peers")
@@ -380,8 +412,14 @@ func peerFromLabels(l log.Logger, node *v1.Node) (*peer, error) {
 	}
 
 	// Verify required peer config.
-	if peerASN == 0 || peerAddr == nil || myASN == 0 {
-		return nil, errors.New("invalid peer configuration")
+	if peerASN == 0 {
+		return nil, errors.New("peer ASN must be set")
+	}
+	if peerAddr == nil {
+		return nil, errors.New("peer address must be set")
+	}
+	if myASN == 0 {
+		return nil, errors.New("local ASN must be set")
 	}
 
 	// Set defaults.
