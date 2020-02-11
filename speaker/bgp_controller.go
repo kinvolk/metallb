@@ -322,32 +322,31 @@ func (c *bgpController) SetNode(l log.Logger, node *v1.Node) error {
 
 	// Attempt to create a BGP peer from node labels.
 	p, err := peerFromLabels(l, node)
+	ep, peerExists := c.nodePeers[node.Name]
 	if err != nil {
-		l.Log("op", "setNode", "error", err, "msg", "parsing BGP peer from labels")
 		// Node has invalid/partial/missing peer config. If a BGP
 		// peer exists for this node, we need to remove it.
-		if ep, exists := c.nodePeers[node.Name]; exists {
-			l.Log("event", "peerRemoved", "node", node.Name, "peer", ep.cfg.Addr, "reason", "noValidNodePeerConfig", "msg", "peer deconfigured, closing BGP session")
-			var bgpCloseFailed bool
+		l.Log("op", "setNode", "error", err, "msg", "invalid node peer config")
+		if peerExists {
+			l.Log("op", "setNode", "node", node.Name, "msg", "removing old node peer")
 			if ep.bgp != nil {
 				if err := ep.bgp.Close(); err != nil {
 					l.Log("op", "setNode", "error", err, "peer", ep.cfg.Addr, "msg", "failed to shut down BGP session")
-					bgpCloseFailed = true
 				}
 			}
-			if !bgpCloseFailed {
-				// Delete peer unless we couldn't clear its BGP session.
-				delete(c.nodePeers, node.Name)
-			}
+			delete(c.nodePeers, node.Name)
 		}
 	} else {
-		if _, exists := c.nodePeers[node.Name]; exists {
-			// Peer exists. Ensure its config is up to date.
-			if !reflect.DeepEqual(p.cfg, c.nodePeers[node.Name].cfg) {
-				// Peer has an outdated config. Update it.
-				l.Log("op", "setNode", "node", node.Name, "msg", "updating node peer config")
-				c.nodePeers[node.Name].cfg = p.cfg
+		// Valid config.
+		if peerExists && !reflect.DeepEqual(ep.cfg, p.cfg) {
+			// Existing peer has an outdated config. Update it.
+			l.Log("op", "setNode", "node", node.Name, "msg", "removing outdated node peer")
+			if ep.bgp != nil {
+				if err := ep.bgp.Close(); err != nil {
+					l.Log("op", "setNode", "error", err, "peer", ep.cfg.Addr, "msg", "failed to shut down BGP session")
+				}
 			}
+			c.nodePeers[node.Name] = p
 		} else {
 			// Peer doesn't exist. Create it.
 			l.Log("op", "setNode", "node", node.Name, "msg", "creating node peer")
