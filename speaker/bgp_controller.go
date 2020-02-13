@@ -366,6 +366,7 @@ func peerFromLabels(l log.Logger, node *v1.Node) (*peer, error) {
 	var peerAddr net.IP
 	var peerPort uint16
 	var holdTime time.Duration
+	var holdTimeRaw string
 	var routerID net.IP
 	var password string
 
@@ -395,11 +396,7 @@ func peerFromLabels(l log.Logger, node *v1.Node) (*peer, error) {
 			}
 			peerPort = uint16(port)
 		case labelHoldTime:
-			ht, err := parseHoldTime(v)
-			if err != nil {
-				return nil, fmt.Errorf("parsing hold time: %v", err)
-			}
-			holdTime = ht
+			holdTimeRaw = v
 		case labelRouterID:
 			routerID = net.ParseIP(v)
 			if routerID == nil {
@@ -421,10 +418,16 @@ func peerFromLabels(l log.Logger, node *v1.Node) (*peer, error) {
 		return nil, errors.New("local ASN must be set")
 	}
 
-	// Set defaults.
+	// Set default BGP port if unspecified by user.
 	if peerPort == 0 {
 		peerPort = 179
 	}
+
+	ht, err := parseHoldTime(holdTimeRaw)
+	if err != nil {
+		return nil, fmt.Errorf("parsing hold time: %v", err)
+	}
+	holdTime = ht
 
 	// The peer is configured on a specific node object, so we want
 	// to create a BGP session only on that node.
