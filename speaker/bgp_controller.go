@@ -290,6 +290,14 @@ func (c *bgpController) updateAds() error {
 			return err
 		}
 	}
+	for _, peer := range c.nodePeers {
+		if peer.bgp == nil {
+			continue
+		}
+		if err := peer.bgp.Set(allAds...); err != nil {
+			return err
+		}
+	}
 	return nil
 }
 
