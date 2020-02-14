@@ -26,7 +26,7 @@ import (
 	"go.universe.tf/metallb/internal/layer2"
 	"go.universe.tf/metallb/internal/logging"
 	"go.universe.tf/metallb/internal/version"
-	"k8s.io/api/core/v1"
+	v1 "k8s.io/api/core/v1"
 
 	"github.com/go-kit/kit/log"
 	"github.com/prometheus/client_golang/prometheus"
@@ -141,9 +141,10 @@ type controllerConfig struct {
 func newController(cfg controllerConfig) (*controller, error) {
 	protocols := map[config.Proto]Protocol{
 		config.BGP: &bgpController{
-			logger: cfg.Logger,
-			myNode: cfg.MyNode,
-			svcAds: make(map[string][]*bgp.Advertisement),
+			logger:    cfg.Logger,
+			myNode:    cfg.MyNode,
+			nodePeers: make(map[string]*peer),
+			svcAds:    make(map[string][]*bgp.Advertisement),
 		},
 	}
 
