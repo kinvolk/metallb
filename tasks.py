@@ -3,6 +3,7 @@ import os.path
 import re
 import semver
 import sys
+import tempfile
 import yaml
 
 from invoke import run, task
@@ -39,7 +40,7 @@ def _check_binaries(binaries):
             out |= all_binaries
         elif binary not in all_binaries:
             print("Unknown binary {}".format(binary))
-            print("Known binaries: {}".format(", ",join(sorted(all_binaries))))
+            print("Known binaries: {}".format(", ".join(sorted(all_binaries))))
             sys.exit(1)
         else:
             out.add(binary)
@@ -158,12 +159,15 @@ def dev_env(ctx, architecture="amd64", name="kind", cni=None):
             tmp.flush()
             run("kind create cluster --name={} --config={}".format(name, tmp.name), pty=True, echo=True)
 
-    config = run("kind get kubeconfig-path --name={}".format(name), hide=True).stdout.strip()
-    env = {"KUBECONFIG": config}
+    kubeconfig = run("kind get kubeconfig --name={}".format(name), hide=True).stdout
+    kubeconfig_file = tempfile.NamedTemporaryFile(delete=False)
+    kubeconfig_file.write(kubeconfig.encode("utf-8"))
+    kubeconfig_file.flush()
+    env = {"KUBECONFIG": kubeconfig_file.name}
     if mk_cluster and cni:
         run("kubectl apply -f e2etest/manifests/{}.yaml".format(cni), echo=True, env=env)
 
-    build(ctx, binaries=["controller", "speaker", "mirror-server"], architectures=[architecture])
+    build(ctx, binaries=["controller", "speaker", "e2etest-mirror-server"], architectures=[architecture])
     run("kind load docker-image --name={} metallb/controller:dev-{}".format(name, architecture), echo=True)
     run("kind load docker-image --name={} metallb/speaker:dev-{}".format(name, architecture), echo=True)
     run("kind load docker-image --name={} metallb/mirror-server:dev-{}".format(name, architecture), echo=True)
@@ -191,7 +195,9 @@ def dev_env(ctx, architecture="amd64", name="kind", cni=None):
 To access the cluster:
 
 export KUBECONFIG={}
-""".format(config))
+""".format(kubeconfig_file.name))
+
+    kubeconfig_file.close()
 
 @task
 def release(ctx, version, skip_release_notes=False):
