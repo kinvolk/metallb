@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"net"
+	"reflect"
 	"sort"
 	"sync"
 	"testing"
@@ -15,7 +16,7 @@ import (
 
 	"github.com/go-kit/kit/log"
 	"github.com/google/go-cmp/cmp"
-	"k8s.io/api/core/v1"
+	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
 )
@@ -1055,4 +1056,124 @@ func TestNodeSelectors(t *testing.T) {
 			t.Errorf("%q: unexpected advertisement state (-want +got)\n%s", test.desc, diff)
 		}
 	}
+}
+
+func TestPeerFromLabels(t *testing.T) {
+	tests := []struct {
+		desc     string
+		node     *v1.Node
+		wantErr  bool
+		wantPeer *peer
+	}{
+		{
+			desc: "Unrelated labels",
+			node: &v1.Node{
+				ObjectMeta: metav1.ObjectMeta{
+					Labels: map[string]string{
+						"foo": "bar",
+					},
+				},
+			},
+			wantErr:  true,
+			wantPeer: nil,
+		},
+		{
+			desc: "Empty labels map",
+			node: &v1.Node{
+				ObjectMeta: metav1.ObjectMeta{
+					Labels: map[string]string{},
+				},
+			},
+			wantErr:  true,
+			wantPeer: nil,
+		},
+		{
+			desc: "Nil labels",
+			node: &v1.Node{
+				ObjectMeta: metav1.ObjectMeta{
+					Labels: nil,
+				},
+			},
+			wantErr:  true,
+			wantPeer: nil,
+		},
+		{
+			desc: "Minimal valid peer config",
+			node: &v1.Node{
+				ObjectMeta: metav1.ObjectMeta{
+					Labels: map[string]string{
+						"kubernetes.io/hostname":           "test",
+						"metallb.universe.tf/my-asn":       "65000",
+						"metallb.universe.tf/peer-asn":     "65001",
+						"metallb.universe.tf/peer-address": "10.0.0.1",
+					},
+				},
+			},
+			wantErr: false,
+			wantPeer: &peer{
+				cfg: &config.Peer{
+					ASN:      65001,
+					MyASN:    65000,
+					Addr:     net.ParseIP("10.0.0.1"),
+					HoldTime: 90 * time.Second,
+					Port:     179,
+					NodeSelectors: []labels.Selector{
+						mustSelector(fmt.Sprintf("%s=%s", v1.LabelHostname, "test")),
+					},
+				},
+			},
+		},
+		{
+			desc: "Full peer config",
+			node: &v1.Node{
+				ObjectMeta: metav1.ObjectMeta{
+					Labels: map[string]string{
+						"kubernetes.io/hostname":           "test",
+						"metallb.universe.tf/my-asn":       "65000",
+						"metallb.universe.tf/peer-asn":     "65001",
+						"metallb.universe.tf/peer-address": "10.0.0.1",
+						"metallb.universe.tf/hold-time":    "30s",
+						"metallb.universe.tf/password":     "testpassword",
+						"metallb.universe.tf/peer-port":    "1179",
+						"metallb.universe.tf/router-id":    "10.0.0.2",
+					},
+				},
+			},
+			wantErr: false,
+			wantPeer: &peer{
+				cfg: &config.Peer{
+					ASN:      65001,
+					MyASN:    65000,
+					Addr:     net.ParseIP("10.0.0.1"),
+					HoldTime: 30 * time.Second,
+					Port:     1179,
+					NodeSelectors: []labels.Selector{
+						mustSelector(fmt.Sprintf("%s=%s", v1.LabelHostname, "test")),
+					},
+					Password: "testpassword",
+					RouterID: net.ParseIP("10.0.0.2"),
+				},
+			},
+		},
+	}
+
+	l := log.NewNopLogger()
+	for _, test := range tests {
+		gotPeer, err := peerFromLabels(l, test.node)
+		if test.wantErr && err == nil {
+			t.Errorf("%q: Expected an error but got nil", test.desc)
+		}
+		if !test.wantErr && err != nil {
+			t.Errorf("%q: Expected no error but got %q", test.desc, err.Error())
+		}
+		// TODO: Use a better comparer. This should allow viewing a per-line diff
+		// rather than a diff of the entire struct.
+		if diff := cmp.Diff(test.wantPeer, gotPeer, cmp.Comparer(peersEqual)); diff != "" {
+			t.Errorf("%q: Unexpected peer (-want +got)\n%s", test.desc, diff)
+		}
+	}
+}
+
+func peersEqual(x, y *peer) bool {
+	return reflect.DeepEqual(x, y)
 }
