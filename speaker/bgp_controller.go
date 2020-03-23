@@ -438,6 +438,7 @@ func peerFromLabels(l log.Logger, node *v1.Node) (*peer, error) {
 
 	// The peer is configured on a specific node object, so we want
 	// to create a BGP session only on that node.
+	// TODO: Is it legal to have a Node object without a hostname label?
 	h := node.Labels[v1.LabelHostname]
 	if h == "" {
 		return nil, fmt.Errorf("label %s not found on node", v1.LabelHostname)
