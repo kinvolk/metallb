@@ -43,9 +43,6 @@ const (
 	labelPeerASN     = "metallb.universe.tf/peer-asn"
 	labelPeerPort    = "metallb.universe.tf/peer-port"
 	labelRouterID    = "metallb.universe.tf/router-id"
-
-	// Well-known k8s label which allows selecting nodes by hostname.
-	labelHostname = "kubernetes.io/hostname"
 )
 
 type peer struct {
@@ -441,11 +438,11 @@ func peerFromLabels(l log.Logger, node *v1.Node) (*peer, error) {
 
 	// The peer is configured on a specific node object, so we want
 	// to create a BGP session only on that node.
-	h := node.Labels[labelHostname]
+	h := node.Labels[v1.LabelHostname]
 	if h == "" {
-		return nil, fmt.Errorf("label %s not found on node", labelHostname)
+		return nil, fmt.Errorf("label %s not found on node", v1.LabelHostname)
 	}
-	ns, err := labels.Parse(fmt.Sprintf("%s=%s", labelHostname, h))
+	ns, err := labels.Parse(fmt.Sprintf("%s=%s", v1.LabelHostname, h))
 	if err != nil {
 		return nil, fmt.Errorf("parsing node selector: %v", err)
 	}
