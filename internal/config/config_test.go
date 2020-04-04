@@ -62,6 +62,21 @@ peers:
       foo: bar
     match-expressions:
       - {key: bar, operator: In, values: [quux]}
+peer-autodiscovery:
+  from-annotations:
+    my-asn: example.com/my-asn
+    peer-asn: example.com/peer-asn
+    peer-address: example.com/peer-address
+    peer-port: example.com/peer-port
+    hold-time: example.com/hold-time
+    router-id: example.com/router-id
+  from-labels:
+    my-asn: example.com/my-asn
+    peer-asn: example.com/peer-asn
+    peer-address: example.com/peer-address
+    peer-port: example.com/peer-port
+    hold-time: example.com/hold-time
+    router-id: example.com/router-id
 bgp-communities:
   bar: 64512:1234
 address-pools:
@@ -110,6 +125,24 @@ address-pools:
 						Port:          179,
 						HoldTime:      90 * time.Second,
 						NodeSelectors: []labels.Selector{selector("bar in (quux),foo=bar")},
+					},
+				},
+				PeerAutodiscovery: &PeerAutodiscovery{
+					FromAnnotations: &PeerAutodiscoveryParams{
+						MyASN:    "example.com/my-asn",
+						ASN:      "example.com/peer-asn",
+						Addr:     "example.com/peer-address",
+						Port:     "example.com/peer-port",
+						HoldTime: "example.com/hold-time",
+						RouterID: "example.com/router-id",
+					},
+					FromLabels: &PeerAutodiscoveryParams{
+						MyASN:    "example.com/my-asn",
+						ASN:      "example.com/peer-asn",
+						Addr:     "example.com/peer-address",
+						Port:     "example.com/peer-port",
+						HoldTime: "example.com/hold-time",
+						RouterID: "example.com/router-id",
 					},
 				},
 				Pools: map[string]*Pool{

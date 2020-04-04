@@ -31,9 +31,10 @@ import (
 // configFile is the configuration as parsed out of the ConfigMap,
 // without validation or useful high level types.
 type configFile struct {
-	Peers          []peer
-	BGPCommunities map[string]string `yaml:"bgp-communities"`
-	Pools          []addressPool     `yaml:"address-pools"`
+	Peers             []peer
+	PeerAutodiscovery *peerAutodiscovery `yaml:"peer-autodiscovery"`
+	BGPCommunities    map[string]string  `yaml:"bgp-communities"`
+	Pools             []addressPool      `yaml:"address-pools"`
 }
 
 type peer struct {
@@ -45,6 +46,21 @@ type peer struct {
 	RouterID      string         `yaml:"router-id"`
 	NodeSelectors []nodeSelector `yaml:"node-selectors"`
 	Password      string         `yaml:"password"`
+}
+
+type peerAutodiscovery struct {
+	// TODO: Add Defaults field.
+	FromAnnotations peerAutodiscoveryParams `yaml:"from-annotations"`
+	FromLabels      peerAutodiscoveryParams `yaml:"from-labels"`
+}
+
+type peerAutodiscoveryParams struct {
+	MyASN    string `yaml:"my-asn"`
+	ASN      string `yaml:"peer-asn"`
+	Addr     string `yaml:"peer-address"`
+	Port     string `yaml:"peer-port"`
+	HoldTime string `yaml:"hold-time"`
+	RouterID string `yaml:"router-id"`
 }
 
 type nodeSelector struct {
@@ -77,6 +93,8 @@ type bgpAdvertisement struct {
 type Config struct {
 	// Routers that MetalLB should peer with.
 	Peers []*Peer
+	// Peer autodiscovery configuration.
+	PeerAutodiscovery *PeerAutodiscovery
 	// Address pools from which to allocate load balancer IPs.
 	Pools map[string]*Pool
 }
@@ -110,6 +128,33 @@ type Peer struct {
 	// Authentication password for routers enforcing TCP MD5 authenticated sessions
 	Password string
 	// TODO: more BGP session settings
+}
+
+// PeerAutodiscoveryParams represents BGP peering configuration parameters
+// which can be read from annotations or labels. All fields are strings because
+// the values of this struct are annotation/label keys rather than the actual
+// BGP params. The controller uses the values of this struct to figure out
+// which annotations or labels to get the BGP params from.
+type PeerAutodiscoveryParams struct {
+	MyASN    string
+	ASN      string
+	Addr     string
+	Port     string
+	HoldTime string
+	RouterID string
+}
+
+// PeerAutodiscovery defines automatic discovery of BGP peers using annotations
+// and/or labels. It allows the user to tell MetalLB to retrieve BGP peering
+// configuration dynamically rather than from a static configuration file.
+type PeerAutodiscovery struct {
+	// FromAnnotations tells MetalLB to retrieve BGP peering configuration for
+	// a node by looking up specific annotations on the corresponding Node
+	// object.
+	FromAnnotations *PeerAutodiscoveryParams
+	// FromLabels tells MetalLB to retrieve BGP peering configuration for
+	// a node by looking up specific labels on the corresponding Node object.
+	FromLabels *PeerAutodiscoveryParams
 }
 
 // Pool is the configuration of an IP address pool.
@@ -201,6 +246,14 @@ func Parse(bs []byte) (*Config, error) {
 			return nil, fmt.Errorf("parsing peer #%d: %s", i+1, err)
 		}
 		cfg.Peers = append(cfg.Peers, peer)
+	}
+
+	if raw.PeerAutodiscovery != nil {
+		pad, err := parsePeerAutodiscovery(*raw.PeerAutodiscovery)
+		if err != nil {
+			return nil, fmt.Errorf("parsing peer autodiscovery: %s", err)
+		}
+		cfg.PeerAutodiscovery = pad
 	}
 
 	communities := map[string]uint32{}
@@ -300,6 +353,29 @@ func parsePeer(p peer) (*Peer, error) {
 		NodeSelectors: nodeSels,
 		Password:      password,
 	}, nil
+}
+
+func parsePeerAutodiscovery(p peerAutodiscovery) (*PeerAutodiscovery, error) {
+	pad := &PeerAutodiscovery{
+		FromAnnotations: &PeerAutodiscoveryParams{
+			ASN:      p.FromAnnotations.ASN,
+			Addr:     p.FromAnnotations.Addr,
+			HoldTime: p.FromAnnotations.HoldTime,
+			MyASN:    p.FromAnnotations.MyASN,
+			Port:     p.FromAnnotations.Port,
+			RouterID: p.FromAnnotations.RouterID,
+		},
+		FromLabels: &PeerAutodiscoveryParams{
+			ASN:      p.FromLabels.ASN,
+			Addr:     p.FromLabels.Addr,
+			HoldTime: p.FromLabels.HoldTime,
+			MyASN:    p.FromLabels.MyASN,
+			Port:     p.FromLabels.Port,
+			RouterID: p.FromLabels.RouterID,
+		},
+	}
+
+	return pad, nil
 }
 
 func parseAddressPool(p addressPool, bgpCommunities map[string]uint32) (*Pool, error) {
