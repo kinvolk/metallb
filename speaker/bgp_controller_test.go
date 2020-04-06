@@ -1058,85 +1058,39 @@ func TestNodeSelectors(t *testing.T) {
 	}
 }
 
-func TestPeerFromLabels(t *testing.T) {
+func TestDiscoverNodePeer(t *testing.T) {
 	tests := []struct {
 		desc     string
 		node     *v1.Node
+		pad      *config.PeerAutodiscovery
 		wantErr  bool
 		wantPeer *peer
 	}{
 		{
-			desc: "Unrelated labels",
+			desc: "Use all annotations",
 			node: &v1.Node{
 				ObjectMeta: metav1.ObjectMeta{
 					Labels: map[string]string{
-						"foo": "bar",
+						"kubernetes.io/hostname": "test",
+					},
+					Annotations: map[string]string{
+						"example.com/my-asn":    "65000",
+						"example.com/asn":       "65001",
+						"example.com/addr":      "10.0.0.1",
+						"example.com/port":      "1179",
+						"example.com/hold-time": "30s",
+						"example.com/router-id": "10.0.0.2",
 					},
 				},
 			},
-			wantErr:  true,
-			wantPeer: nil,
-		},
-		{
-			desc: "Empty labels map",
-			node: &v1.Node{
-				ObjectMeta: metav1.ObjectMeta{
-					Labels: map[string]string{},
-				},
-			},
-			wantErr:  true,
-			wantPeer: nil,
-		},
-		{
-			desc: "Nil labels",
-			node: &v1.Node{
-				ObjectMeta: metav1.ObjectMeta{
-					Labels: nil,
-				},
-			},
-			wantErr:  true,
-			wantPeer: nil,
-		},
-		{
-			desc: "Minimal valid peer config",
-			node: &v1.Node{
-				ObjectMeta: metav1.ObjectMeta{
-					Labels: map[string]string{
-						"kubernetes.io/hostname":           "test",
-						"metallb.universe.tf/my-asn":       "65000",
-						"metallb.universe.tf/peer-asn":     "65001",
-						"metallb.universe.tf/peer-address": "10.0.0.1",
-					},
-				},
-			},
-			wantErr: false,
-			wantPeer: &peer{
-				cfg: &config.Peer{
-					ASN:      65001,
-					MyASN:    65000,
-					Addr:     net.ParseIP("10.0.0.1"),
-					HoldTime: 90 * time.Second,
-					Port:     179,
-					NodeSelectors: []labels.Selector{
-						mustSelector(fmt.Sprintf("%s=%s", v1.LabelHostname, "test")),
-					},
-				},
-			},
-		},
-		{
-			desc: "Full peer config",
-			node: &v1.Node{
-				ObjectMeta: metav1.ObjectMeta{
-					Labels: map[string]string{
-						"kubernetes.io/hostname":           "test",
-						"metallb.universe.tf/my-asn":       "65000",
-						"metallb.universe.tf/peer-asn":     "65001",
-						"metallb.universe.tf/peer-address": "10.0.0.1",
-						"metallb.universe.tf/hold-time":    "30s",
-						"metallb.universe.tf/password":     "testpassword",
-						"metallb.universe.tf/peer-port":    "1179",
-						"metallb.universe.tf/router-id":    "10.0.0.2",
-					},
+			pad: &config.PeerAutodiscovery{
+				FromAnnotations: &config.PeerAutodiscoveryParams{
+					MyASN:    "example.com/my-asn",
+					ASN:      "example.com/asn",
+					Addr:     "example.com/addr",
+					Port:     "example.com/port",
+					HoldTime: "example.com/hold-time",
+					RouterID: "example.com/router-id",
 				},
 			},
 			wantErr: false,
@@ -1150,7 +1104,46 @@ func TestPeerFromLabels(t *testing.T) {
 					NodeSelectors: []labels.Selector{
 						mustSelector(fmt.Sprintf("%s=%s", v1.LabelHostname, "test")),
 					},
-					Password: "testpassword",
+					RouterID: net.ParseIP("10.0.0.2"),
+				},
+			},
+		},
+		{
+			desc: "Use all labels",
+			node: &v1.Node{
+				ObjectMeta: metav1.ObjectMeta{
+					Labels: map[string]string{
+						"kubernetes.io/hostname": "test",
+						"example.com/my-asn":     "65000",
+						"example.com/asn":        "65001",
+						"example.com/addr":       "10.0.0.1",
+						"example.com/port":       "1179",
+						"example.com/hold-time":  "30s",
+						"example.com/router-id":  "10.0.0.2",
+					},
+				},
+			},
+			pad: &config.PeerAutodiscovery{
+				FromLabels: &config.PeerAutodiscoveryParams{
+					MyASN:    "example.com/my-asn",
+					ASN:      "example.com/asn",
+					Addr:     "example.com/addr",
+					Port:     "example.com/port",
+					HoldTime: "example.com/hold-time",
+					RouterID: "example.com/router-id",
+				},
+			},
+			wantErr: false,
+			wantPeer: &peer{
+				cfg: &config.Peer{
+					ASN:      65001,
+					MyASN:    65000,
+					Addr:     net.ParseIP("10.0.0.1"),
+					HoldTime: 30 * time.Second,
+					Port:     1179,
+					NodeSelectors: []labels.Selector{
+						mustSelector(fmt.Sprintf("%s=%s", v1.LabelHostname, "test")),
+					},
 					RouterID: net.ParseIP("10.0.0.2"),
 				},
 			},
@@ -1159,7 +1152,7 @@ func TestPeerFromLabels(t *testing.T) {
 
 	l := log.NewNopLogger()
 	for _, test := range tests {
-		gotPeer, err := peerFromLabels(l, test.node)
+		gotPeer, err := discoverNodePeer(l, test.pad, test.node)
 		if test.wantErr && err == nil {
 			t.Errorf("%q: Expected an error but got nil", test.desc)
 		}

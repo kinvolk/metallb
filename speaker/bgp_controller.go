@@ -62,16 +62,19 @@ type peer struct {
 }
 
 type bgpController struct {
-	logger          log.Logger
-	myNode          string
-	nodeAnnotations labels.Set
-	nodeLabels      labels.Set
-	nodePeers       map[string]*peer
-	peers           []*peer
-	svcAds          map[string][]*bgp.Advertisement
+	logger            log.Logger
+	myNode            string
+	nodeAnnotations   labels.Set
+	nodeLabels        labels.Set
+	nodePeers         map[string]*peer
+	peerAutodiscovery *config.PeerAutodiscovery
+	peers             []*peer
+	svcAds            map[string][]*bgp.Advertisement
 }
 
 func (c *bgpController) SetConfig(l log.Logger, cfg *config.Config) error {
+	c.peerAutodiscovery = cfg.PeerAutodiscovery
+
 	newPeers := make([]*peer, 0, len(cfg.Peers))
 newPeers:
 	for _, p := range cfg.Peers {
@@ -346,8 +349,8 @@ func (c *bgpController) SetNode(l log.Logger, node *v1.Node) error {
 	c.nodeAnnotations = anns
 	c.nodeLabels = ns
 
-	// Attempt to create a BGP peer from node labels.
-	p, err := peerFromLabels(l, node)
+	// Attempt to create a BGP peer from node annotations and/or labels.
+	p, err := discoverNodePeer(l, c.peerAutodiscovery, node)
 	ep, peerExists := c.nodePeers[node.Name]
 	if err != nil {
 		// Node has invalid/partial/missing peer config. If a BGP
@@ -384,9 +387,11 @@ func (c *bgpController) SetNode(l log.Logger, node *v1.Node) error {
 	return c.syncPeers(l)
 }
 
-// peerFromLabels looks for labels on a node and attempts to create a
-// BGP peer from them.
-func peerFromLabels(l log.Logger, node *v1.Node) (*peer, error) {
+// discoverNodePeer attempts to construct a BGP peer from information conveyed
+// in node annotations and labels.
+//
+// TODO: Explain precedence and defaults behavior.
+func discoverNodePeer(l log.Logger, pad *config.PeerAutodiscovery, node *v1.Node) (*peer, error) {
 	var (
 		myASN       uint32
 		peerASN     uint32
@@ -398,40 +403,81 @@ func peerFromLabels(l log.Logger, node *v1.Node) (*peer, error) {
 		password    string
 	)
 
-	for k, v := range node.Labels {
-		switch k {
-		case labelMyASN:
-			asn, err := strconv.ParseUint(v, 10, 32)
-			if err != nil {
-				return nil, fmt.Errorf("parsing local ASN: %v", err)
+	if pad == nil {
+		return nil, errors.New("nil peer autodiscovery")
+	}
+
+	if pad.FromLabels != nil {
+		for k, v := range node.Labels {
+			switch k {
+			case pad.FromLabels.MyASN:
+				asn, err := strconv.ParseUint(v, 10, 32)
+				if err != nil {
+					return nil, fmt.Errorf("parsing local ASN: %v", err)
+				}
+				myASN = uint32(asn)
+			case pad.FromLabels.ASN:
+				asn, err := strconv.ParseUint(v, 10, 32)
+				if err != nil {
+					return nil, fmt.Errorf("parsing peer ASN: %v", err)
+				}
+				peerASN = uint32(asn)
+			case pad.FromLabels.Addr:
+				peerAddr = net.ParseIP(v)
+				if peerAddr == nil {
+					return nil, fmt.Errorf("invalid peer IP %q", v)
+				}
+			case pad.FromLabels.Port:
+				port, err := strconv.ParseUint(v, 10, 16)
+				if err != nil {
+					return nil, fmt.Errorf("parsing peer port: %v", err)
+				}
+				peerPort = uint16(port)
+			case pad.FromLabels.HoldTime:
+				holdTimeRaw = v
+			case pad.FromLabels.RouterID:
+				routerID = net.ParseIP(v)
+				if routerID == nil {
+					return nil, fmt.Errorf("invalid router ID %q", v)
+				}
 			}
-			myASN = uint32(asn)
-		case labelPeerASN:
-			asn, err := strconv.ParseUint(v, 10, 32)
-			if err != nil {
-				return nil, fmt.Errorf("parsing peer ASN: %v", err)
+		}
+	}
+
+	if pad.FromAnnotations != nil {
+		for k, v := range node.Annotations {
+			switch k {
+			case pad.FromAnnotations.MyASN:
+				asn, err := strconv.ParseUint(v, 10, 32)
+				if err != nil {
+					return nil, fmt.Errorf("parsing local ASN: %v", err)
+				}
+				myASN = uint32(asn)
+			case pad.FromAnnotations.ASN:
+				asn, err := strconv.ParseUint(v, 10, 32)
+				if err != nil {
+					return nil, fmt.Errorf("parsing peer ASN: %v", err)
+				}
+				peerASN = uint32(asn)
+			case pad.FromAnnotations.Addr:
+				peerAddr = net.ParseIP(v)
+				if peerAddr == nil {
+					return nil, fmt.Errorf("invalid peer IP %q", v)
+				}
+			case pad.FromAnnotations.Port:
+				port, err := strconv.ParseUint(v, 10, 16)
+				if err != nil {
+					return nil, fmt.Errorf("parsing peer port: %v", err)
+				}
+				peerPort = uint16(port)
+			case pad.FromAnnotations.HoldTime:
+				holdTimeRaw = v
+			case pad.FromAnnotations.RouterID:
+				routerID = net.ParseIP(v)
+				if routerID == nil {
+					return nil, fmt.Errorf("invalid router ID %q", v)
+				}
 			}
-			peerASN = uint32(asn)
-		case labelPeerAddress:
-			peerAddr = net.ParseIP(v)
-			if peerAddr == nil {
-				return nil, fmt.Errorf("invalid peer IP %q", v)
-			}
-		case labelPeerPort:
-			port, err := strconv.ParseUint(v, 10, 16)
-			if err != nil {
-				return nil, fmt.Errorf("parsing peer port: %v", err)
-			}
-			peerPort = uint16(port)
-		case labelHoldTime:
-			holdTimeRaw = v
-		case labelRouterID:
-			routerID = net.ParseIP(v)
-			if routerID == nil {
-				return nil, fmt.Errorf("invalid router ID %q", v)
-			}
-		case labelPassword:
-			password = v
 		}
 	}
 
