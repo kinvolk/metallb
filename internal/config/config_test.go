@@ -128,7 +128,7 @@ address-pools:
 					},
 				},
 				PeerAutodiscovery: &PeerAutodiscovery{
-					FromAnnotations: &PeerAutodiscoveryParams{
+					FromAnnotations: &PeerAutodiscoveryMapping{
 						MyASN:    "example.com/my-asn",
 						ASN:      "example.com/peer-asn",
 						Addr:     "example.com/peer-address",
@@ -136,7 +136,7 @@ address-pools:
 						HoldTime: "example.com/hold-time",
 						RouterID: "example.com/router-id",
 					},
-					FromLabels: &PeerAutodiscoveryParams{
+					FromLabels: &PeerAutodiscoveryMapping{
 						MyASN:    "example.com/my-asn",
 						ASN:      "example.com/peer-asn",
 						Addr:     "example.com/peer-address",

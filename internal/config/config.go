@@ -50,11 +50,11 @@ type peer struct {
 
 type peerAutodiscovery struct {
 	// TODO: Add Defaults field.
-	FromAnnotations peerAutodiscoveryParams `yaml:"from-annotations"`
-	FromLabels      peerAutodiscoveryParams `yaml:"from-labels"`
+	FromAnnotations peerAutodiscoveryMapping `yaml:"from-annotations"`
+	FromLabels      peerAutodiscoveryMapping `yaml:"from-labels"`
 }
 
-type peerAutodiscoveryParams struct {
+type peerAutodiscoveryMapping struct {
 	MyASN    string `yaml:"my-asn"`
 	ASN      string `yaml:"peer-asn"`
 	Addr     string `yaml:"peer-address"`
@@ -130,12 +130,23 @@ type Peer struct {
 	// TODO: more BGP session settings
 }
 
-// PeerAutodiscoveryParams represents BGP peering configuration parameters
-// which can be read from annotations or labels. All fields are strings because
-// the values of this struct are annotation/label keys rather than the actual
-// BGP params. The controller uses the values of this struct to figure out
-// which annotations or labels to get the BGP params from.
-type PeerAutodiscoveryParams struct {
+// PeerAutodiscoveryMapping maps BGP peering configuration parameters to node
+// annotations or labels to allow automatic discovery of BGP configuration
+// from Node objects.
+//
+// All the fields are strings because the values of a PeerAutodiscoveryMapping
+// are annotation/label keys rather than the BGP parameters themselves. The
+// controller uses the PeerAutodiscoveryMapping to figure out which annotations
+// or labels to get the BGP parameters from for a given node peer.
+//
+// For example, setting MyASN to example.com/my-asn means "look for an
+// annotation or label with the key example.com/my-asn on a Node object and use
+// its value as the local ASN of that node's BGP peer".
+//
+// Whether to use annotations or labels is out of scope for this type: since
+// both annotations and labels use string keys, a PeerAutodiscoveryMapping can
+// be used to map to both annotations and labels.
+type PeerAutodiscoveryMapping struct {
 	// TODO: Document fields.
 	MyASN    string
 	ASN      string
@@ -152,10 +163,10 @@ type PeerAutodiscovery struct {
 	// FromAnnotations tells MetalLB to retrieve BGP peering configuration for
 	// a node by looking up specific annotations on the corresponding Node
 	// object.
-	FromAnnotations *PeerAutodiscoveryParams
+	FromAnnotations *PeerAutodiscoveryMapping
 	// FromLabels tells MetalLB to retrieve BGP peering configuration for
 	// a node by looking up specific labels on the corresponding Node object.
-	FromLabels *PeerAutodiscoveryParams
+	FromLabels *PeerAutodiscoveryMapping
 }
 
 // Pool is the configuration of an IP address pool.
@@ -358,7 +369,7 @@ func parsePeer(p peer) (*Peer, error) {
 
 func parsePeerAutodiscovery(p peerAutodiscovery) (*PeerAutodiscovery, error) {
 	pad := &PeerAutodiscovery{
-		FromAnnotations: &PeerAutodiscoveryParams{
+		FromAnnotations: &PeerAutodiscoveryMapping{
 			ASN:      p.FromAnnotations.ASN,
 			Addr:     p.FromAnnotations.Addr,
 			HoldTime: p.FromAnnotations.HoldTime,
@@ -366,7 +377,7 @@ func parsePeerAutodiscovery(p peerAutodiscovery) (*PeerAutodiscovery, error) {
 			Port:     p.FromAnnotations.Port,
 			RouterID: p.FromAnnotations.RouterID,
 		},
-		FromLabels: &PeerAutodiscoveryParams{
+		FromLabels: &PeerAutodiscoveryMapping{
 			ASN:      p.FromLabels.ASN,
 			Addr:     p.FromLabels.Addr,
 			HoldTime: p.FromLabels.HoldTime,

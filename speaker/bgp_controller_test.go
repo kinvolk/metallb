@@ -1084,7 +1084,7 @@ func TestDiscoverNodePeer(t *testing.T) {
 				},
 			},
 			pad: &config.PeerAutodiscovery{
-				FromAnnotations: &config.PeerAutodiscoveryParams{
+				FromAnnotations: &config.PeerAutodiscoveryMapping{
 					MyASN:    "example.com/my-asn",
 					ASN:      "example.com/asn",
 					Addr:     "example.com/addr",
@@ -1124,7 +1124,7 @@ func TestDiscoverNodePeer(t *testing.T) {
 				},
 			},
 			pad: &config.PeerAutodiscovery{
-				FromLabels: &config.PeerAutodiscoveryParams{
+				FromLabels: &config.PeerAutodiscoveryMapping{
 					MyASN:    "example.com/my-asn",
 					ASN:      "example.com/asn",
 					Addr:     "example.com/addr",
