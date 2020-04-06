@@ -136,6 +136,7 @@ type Peer struct {
 // BGP params. The controller uses the values of this struct to figure out
 // which annotations or labels to get the BGP params from.
 type PeerAutodiscoveryParams struct {
+	// TODO: Document fields.
 	MyASN    string
 	ASN      string
 	Addr     string
