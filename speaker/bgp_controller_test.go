@@ -1059,6 +1059,15 @@ func TestNodeSelectors(t *testing.T) {
 }
 
 func TestDiscoverNodePeer(t *testing.T) {
+	pam := &config.PeerAutodiscoveryMapping{
+		MyASN:    "example.com/my-asn",
+		ASN:      "example.com/asn",
+		Addr:     "example.com/addr",
+		Port:     "example.com/port",
+		HoldTime: "example.com/hold-time",
+		RouterID: "example.com/router-id",
+	}
+
 	tests := []struct {
 		desc     string
 		node     *v1.Node
@@ -1084,14 +1093,7 @@ func TestDiscoverNodePeer(t *testing.T) {
 				},
 			},
 			pad: &config.PeerAutodiscovery{
-				FromAnnotations: &config.PeerAutodiscoveryMapping{
-					MyASN:    "example.com/my-asn",
-					ASN:      "example.com/asn",
-					Addr:     "example.com/addr",
-					Port:     "example.com/port",
-					HoldTime: "example.com/hold-time",
-					RouterID: "example.com/router-id",
-				},
+				FromAnnotations: pam,
 			},
 			wantErr: false,
 			wantPeer: &peer{
@@ -1124,14 +1126,7 @@ func TestDiscoverNodePeer(t *testing.T) {
 				},
 			},
 			pad: &config.PeerAutodiscovery{
-				FromLabels: &config.PeerAutodiscoveryMapping{
-					MyASN:    "example.com/my-asn",
-					ASN:      "example.com/asn",
-					Addr:     "example.com/addr",
-					Port:     "example.com/port",
-					HoldTime: "example.com/hold-time",
-					RouterID: "example.com/router-id",
-				},
+				FromLabels: pam,
 			},
 			wantErr: false,
 			wantPeer: &peer{
