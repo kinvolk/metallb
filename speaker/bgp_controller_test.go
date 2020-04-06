@@ -1144,7 +1144,7 @@ func TestDiscoverNodePeer(t *testing.T) {
 			},
 		},
 		{
-			desc: "Peer autodiscovery not configured",
+			desc: "Nil peer autodiscovery",
 			node: &v1.Node{
 				ObjectMeta: metav1.ObjectMeta{
 					Annotations: map[string]string{
@@ -1168,6 +1168,75 @@ func TestDiscoverNodePeer(t *testing.T) {
 			},
 			wantErr:  true,
 			wantPeer: nil,
+		},
+		{
+			desc: "Empty peer autodiscovery",
+			node: &v1.Node{
+				ObjectMeta: metav1.ObjectMeta{
+					Annotations: map[string]string{
+						"example.com/my-asn":    "65000",
+						"example.com/asn":       "65001",
+						"example.com/addr":      "10.0.0.1",
+						"example.com/port":      "1179",
+						"example.com/hold-time": "30s",
+						"example.com/router-id": "10.0.0.2",
+					},
+					Labels: map[string]string{
+						"kubernetes.io/hostname": "test",
+						"example.com/my-asn":     "65000",
+						"example.com/asn":        "65001",
+						"example.com/addr":       "10.0.0.1",
+						"example.com/port":       "1179",
+						"example.com/hold-time":  "30s",
+						"example.com/router-id":  "10.0.0.2",
+					},
+				},
+			},
+			pad:      &config.PeerAutodiscovery{},
+			wantErr:  true,
+			wantPeer: nil,
+		},
+		{
+			desc: "Verify annotations get precedence over labels",
+			node: &v1.Node{
+				ObjectMeta: metav1.ObjectMeta{
+					Annotations: map[string]string{
+						"example.com/my-asn":    "65000",
+						"example.com/asn":       "65001",
+						"example.com/addr":      "10.0.0.1",
+						"example.com/port":      "1179",
+						"example.com/hold-time": "30s",
+						"example.com/router-id": "10.0.0.2",
+					},
+					Labels: map[string]string{
+						"kubernetes.io/hostname": "test",
+						"example.com/my-asn":     "65002",
+						"example.com/asn":        "65003",
+						"example.com/addr":       "10.0.0.3",
+						"example.com/port":       "2179",
+						"example.com/hold-time":  "120s",
+						"example.com/router-id":  "10.0.0.4",
+					},
+				},
+			},
+			pad: &config.PeerAutodiscovery{
+				FromAnnotations: pam,
+				FromLabels:      pam,
+			},
+			wantErr: false,
+			wantPeer: &peer{
+				cfg: &config.Peer{
+					ASN:      65001,
+					MyASN:    65000,
+					Addr:     net.ParseIP("10.0.0.1"),
+					HoldTime: 30 * time.Second,
+					Port:     1179,
+					NodeSelectors: []labels.Selector{
+						mustSelector(fmt.Sprintf("%s=%s", v1.LabelHostname, "test")),
+					},
+					RouterID: net.ParseIP("10.0.0.2"),
+				},
+			},
 		},
 	}
 
