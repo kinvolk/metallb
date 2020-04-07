@@ -1076,7 +1076,7 @@ func TestDiscoverNodePeer(t *testing.T) {
 		wantPeer *peer
 	}{
 		{
-			desc: "Use all annotations",
+			desc: "Full config in annotations",
 			node: &v1.Node{
 				ObjectMeta: metav1.ObjectMeta{
 					Labels: map[string]string{
@@ -1112,7 +1112,7 @@ func TestDiscoverNodePeer(t *testing.T) {
 			},
 		},
 		{
-			desc: "Use all labels",
+			desc: "Full config in labels",
 			node: &v1.Node{
 				ObjectMeta: metav1.ObjectMeta{
 					Labels: map[string]string{
@@ -1129,6 +1129,43 @@ func TestDiscoverNodePeer(t *testing.T) {
 			pad: &config.PeerAutodiscovery{
 				NodeSelectors: []labels.Selector{labels.Everything()},
 				FromLabels:    pam,
+			},
+			wantErr: false,
+			wantPeer: &peer{
+				cfg: &config.Peer{
+					ASN:      65001,
+					MyASN:    65000,
+					Addr:     net.ParseIP("10.0.0.1"),
+					HoldTime: 30 * time.Second,
+					Port:     1179,
+					NodeSelectors: []labels.Selector{
+						mustSelector(fmt.Sprintf("%s=%s", v1.LabelHostname, "test")),
+					},
+					RouterID: net.ParseIP("10.0.0.2"),
+				},
+			},
+		},
+		{
+			desc: "Mixed - config in labels and annotations",
+			node: &v1.Node{
+				ObjectMeta: metav1.ObjectMeta{
+					Annotations: map[string]string{
+						"example.com/my-asn":    "65000",
+						"example.com/addr":      "10.0.0.1",
+						"example.com/hold-time": "30s",
+					},
+					Labels: map[string]string{
+						"kubernetes.io/hostname": "test",
+						"example.com/asn":        "65001",
+						"example.com/port":       "1179",
+						"example.com/router-id":  "10.0.0.2",
+					},
+				},
+			},
+			pad: &config.PeerAutodiscovery{
+				NodeSelectors:   []labels.Selector{labels.Everything()},
+				FromAnnotations: pam,
+				FromLabels:      pam,
 			},
 			wantErr: false,
 			wantPeer: &peer{
