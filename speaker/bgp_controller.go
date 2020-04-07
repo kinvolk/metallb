@@ -329,8 +329,8 @@ func (c *bgpController) SetNode(l log.Logger, node *v1.Node) error {
 	p, err := discoverNodePeer(l, c.peerAutodiscovery, node)
 	ep, peerExists := c.nodePeers[node.Name]
 	if err != nil {
-		// Node has invalid/partial/missing peer config. If a BGP
-		// peer exists for this node, we need to remove it.
+		// Node has invalid/partial/missing peer config. If a node peer exists
+		// for this node, we need to remove it.
 		l.Log("op", "setNode", "error", err, "msg", "peer autodiscovery failed")
 		if peerExists {
 			l.Log("op", "setNode", "node", node.Name, "msg", "removing old node peer")
