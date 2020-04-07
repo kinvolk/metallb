@@ -32,30 +32,6 @@ import (
 	"github.com/go-kit/kit/log"
 )
 
-const (
-	// K8s annotations which express node-specific BGP peer configuration.
-	annotationHoldTime = "metallb.universe.tf/hold-time"
-	annotationMyASN    = "metallb.universe.tf/my-asn"
-	// TODO: Using this annotation will display the password in clear text
-	// on the Node object.
-	annotationPassword    = "metallb.universe.tf/password"
-	annotationPeerAddress = "metallb.universe.tf/peer-address"
-	annotationPeerASN     = "metallb.universe.tf/peer-asn"
-	annotationPeerPort    = "metallb.universe.tf/peer-port"
-	annotationRouterID    = "metallb.universe.tf/router-id"
-
-	// K8s labels which express node-specific BGP peer configuration.
-	labelHoldTime = "metallb.universe.tf/hold-time"
-	labelMyASN    = "metallb.universe.tf/my-asn"
-	// TODO: Using this label will display the password in clear text
-	// on the Node object.
-	labelPassword    = "metallb.universe.tf/password"
-	labelPeerAddress = "metallb.universe.tf/peer-address"
-	labelPeerASN     = "metallb.universe.tf/peer-asn"
-	labelPeerPort    = "metallb.universe.tf/peer-port"
-	labelRouterID    = "metallb.universe.tf/router-id"
-)
-
 type peer struct {
 	cfg *config.Peer
 	bgp session
@@ -478,107 +454,6 @@ func discoverNodePeer(l log.Logger, pad *config.PeerAutodiscovery, node *v1.Node
 					return nil, fmt.Errorf("invalid router ID %q", v)
 				}
 			}
-		}
-	}
-
-	// Verify required peer config.
-	if peerASN == 0 {
-		return nil, errors.New("peer ASN must be set")
-	}
-	if peerAddr == nil {
-		return nil, errors.New("peer address must be set")
-	}
-	if myASN == 0 {
-		return nil, errors.New("local ASN must be set")
-	}
-
-	// Set default BGP port if unspecified by user.
-	if peerPort == 0 {
-		peerPort = 179
-	}
-
-	ht, err := parseHoldTime(holdTimeRaw)
-	if err != nil {
-		return nil, fmt.Errorf("parsing hold time: %v", err)
-	}
-	holdTime = ht
-
-	// The peer is configured on a specific node object, so we want
-	// to create a BGP session only on that node.
-	// TODO: Is it legal to have a Node object without a hostname label?
-	h := node.Labels[v1.LabelHostname]
-	if h == "" {
-		return nil, fmt.Errorf("label %s not found on node", v1.LabelHostname)
-	}
-	ns, err := labels.Parse(fmt.Sprintf("%s=%s", v1.LabelHostname, h))
-	if err != nil {
-		return nil, fmt.Errorf("parsing node selector: %v", err)
-	}
-
-	p := &peer{
-		cfg: &config.Peer{
-			MyASN:         myASN,
-			ASN:           peerASN,
-			Addr:          peerAddr,
-			Port:          peerPort,
-			HoldTime:      holdTime,
-			RouterID:      routerID,
-			NodeSelectors: []labels.Selector{ns},
-			Password:      password,
-		},
-	}
-
-	return p, nil
-}
-
-// peerFromAnnotations looks for annotations on a node and attempts to create a
-// BGP peer from them.
-func peerFromAnnotations(l log.Logger, node *v1.Node) (*peer, error) {
-	var (
-		myASN       uint32
-		peerASN     uint32
-		peerAddr    net.IP
-		peerPort    uint16
-		holdTime    time.Duration
-		holdTimeRaw string
-		routerID    net.IP
-		password    string
-	)
-
-	for k, v := range node.Annotations {
-		switch k {
-		case annotationMyASN:
-			asn, err := strconv.ParseUint(v, 10, 32)
-			if err != nil {
-				return nil, fmt.Errorf("parsing local ASN: %v", err)
-			}
-			myASN = uint32(asn)
-		case annotationPeerASN:
-			asn, err := strconv.ParseUint(v, 10, 32)
-			if err != nil {
-				return nil, fmt.Errorf("parsing peer ASN: %v", err)
-			}
-			peerASN = uint32(asn)
-		case annotationPeerAddress:
-			peerAddr = net.ParseIP(v)
-			if peerAddr == nil {
-				return nil, fmt.Errorf("invalid peer IP %q", v)
-			}
-		case annotationPeerPort:
-			port, err := strconv.ParseUint(v, 10, 16)
-			if err != nil {
-				return nil, fmt.Errorf("parsing peer port: %v", err)
-			}
-			peerPort = uint16(port)
-		case annotationHoldTime:
-			holdTimeRaw = v
-		case annotationRouterID:
-			routerID = net.ParseIP(v)
-			if routerID == nil {
-				return nil, fmt.Errorf("invalid router ID %q", v)
-			}
-		case annotationPassword:
-			password = v
 		}
 	}
 
