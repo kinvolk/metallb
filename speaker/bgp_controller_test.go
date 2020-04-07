@@ -1093,6 +1093,7 @@ func TestDiscoverNodePeer(t *testing.T) {
 				},
 			},
 			pad: &config.PeerAutodiscovery{
+				NodeSelectors:   []labels.Selector{labels.Everything()},
 				FromAnnotations: pam,
 			},
 			wantErr: false,
@@ -1126,7 +1127,8 @@ func TestDiscoverNodePeer(t *testing.T) {
 				},
 			},
 			pad: &config.PeerAutodiscovery{
-				FromLabels: pam,
+				NodeSelectors: []labels.Selector{labels.Everything()},
+				FromLabels:    pam,
 			},
 			wantErr: false,
 			wantPeer: &peer{
@@ -1220,6 +1222,7 @@ func TestDiscoverNodePeer(t *testing.T) {
 				},
 			},
 			pad: &config.PeerAutodiscovery{
+				NodeSelectors:   []labels.Selector{labels.Everything()},
 				FromAnnotations: pam,
 				FromLabels:      pam,
 			},
@@ -1237,6 +1240,23 @@ func TestDiscoverNodePeer(t *testing.T) {
 					RouterID: net.ParseIP("10.0.0.2"),
 				},
 			},
+		},
+		{
+			desc: "Node labels don't match selector",
+			node: &v1.Node{
+				ObjectMeta: metav1.ObjectMeta{
+					Labels: map[string]string{
+						"kubernetes.io/hostname": "test",
+					},
+				},
+			},
+			pad: &config.PeerAutodiscovery{
+				NodeSelectors:   []labels.Selector{mustSelector("foo=bar")},
+				FromAnnotations: pam,
+				FromLabels:      pam,
+			},
+			wantErr:  false,
+			wantPeer: nil,
 		},
 	}
 

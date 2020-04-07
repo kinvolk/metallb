@@ -50,6 +50,7 @@ type peer struct {
 
 type peerAutodiscovery struct {
 	// TODO: Add Defaults field.
+	NodeSelectors   []nodeSelector           `yaml:"node-selectors"`
 	FromAnnotations peerAutodiscoveryMapping `yaml:"from-annotations"`
 	FromLabels      peerAutodiscoveryMapping `yaml:"from-labels"`
 }
@@ -160,6 +161,10 @@ type PeerAutodiscoveryMapping struct {
 // and/or labels. It allows the user to tell MetalLB to retrieve BGP peering
 // configuration dynamically rather than from a static configuration file.
 type PeerAutodiscovery struct {
+	// NodeSelectors indicates the nodes for which peer autodiscovery should be
+	// enabled. When no selectors are specified, peer autodiscovery will be
+	// attempted for any node.
+	NodeSelectors []labels.Selector
 	// FromAnnotations tells MetalLB to retrieve BGP peering configuration for
 	// a node by looking up specific annotations on the corresponding Node
 	// object.
@@ -368,7 +373,24 @@ func parsePeer(p peer) (*Peer, error) {
 }
 
 func parsePeerAutodiscovery(p peerAutodiscovery) (*PeerAutodiscovery, error) {
+	// We use a non-pointer in the raw json object, so that if the
+	// user doesn't provide a node selector, we end up with an empty,
+	// but non-nil selector, which means "select everything".
+	var nodeSels []labels.Selector
+	if len(p.NodeSelectors) == 0 {
+		nodeSels = []labels.Selector{labels.Everything()}
+	} else {
+		for _, sel := range p.NodeSelectors {
+			nodeSel, err := parseNodeSelector(&sel)
+			if err != nil {
+				return nil, fmt.Errorf("parsing node selector: %s", err)
+			}
+			nodeSels = append(nodeSels, nodeSel)
+		}
+	}
+
 	pad := &PeerAutodiscovery{
+		NodeSelectors: nodeSels,
 		FromAnnotations: &PeerAutodiscoveryMapping{
 			ASN:      p.FromAnnotations.ASN,
 			Addr:     p.FromAnnotations.Addr,

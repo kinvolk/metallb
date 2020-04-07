@@ -63,6 +63,11 @@ peers:
     match-expressions:
       - {key: bar, operator: In, values: [quux]}
 peer-autodiscovery:
+  node-selectors:
+  - match-labels:
+      foo: bar
+    match-expressions:
+      - {key: bar, operator: In, values: [quux]}
   from-annotations:
     my-asn: example.com/my-asn
     peer-asn: example.com/peer-asn
@@ -128,6 +133,9 @@ address-pools:
 					},
 				},
 				PeerAutodiscovery: &PeerAutodiscovery{
+					NodeSelectors: []labels.Selector{
+						selector("bar in (quux),foo=bar"),
+					},
 					FromAnnotations: &PeerAutodiscoveryMapping{
 						MyASN:    "example.com/my-asn",
 						ASN:      "example.com/peer-asn",

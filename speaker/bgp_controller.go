@@ -325,37 +325,47 @@ func (c *bgpController) SetNode(l log.Logger, node *v1.Node) error {
 	c.nodeAnnotations = anns
 	c.nodeLabels = ls
 
-	// Attempt to create a BGP peer from node annotations and/or labels.
-	p, err := discoverNodePeer(l, c.peerAutodiscovery, node)
-	ep, peerExists := c.nodePeers[node.Name]
-	if err != nil {
-		// Node has invalid/partial/missing peer config. If a node peer exists
-		// for this node, we need to remove it.
-		l.Log("op", "setNode", "error", err, "msg", "peer autodiscovery failed")
-		if peerExists {
-			l.Log("op", "setNode", "node", node.Name, "msg", "removing old node peer")
-			if ep.bgp != nil {
-				if err := ep.bgp.Close(); err != nil {
-					l.Log("op", "setNode", "error", err, "peer", ep.cfg.Addr, "msg", "failed to shut down BGP session")
-				}
-			}
-			delete(c.nodePeers, node.Name)
+	// Attempt to create a BGP peer from node annotations and/or labels if peer
+	// autodiscovery is configured.
+	if c.peerAutodiscovery != nil {
+		ep, peerExists := c.nodePeers[node.Name]
+		p, err := discoverNodePeer(l, c.peerAutodiscovery, node)
+		if err != nil {
+			// Log an error without returning to let the user know why peer
+			// autodiscovery failed for this node. We continue execution
+			// because we still want to remove any outdated node peer which may
+			// exist.
+			l.Log("op", "setNode", "node", node.Name, "error", err, "msg", "peer autodiscovery failed")
 		}
-	} else {
-		// Valid config.
-		if peerExists && !reflect.DeepEqual(ep.cfg, p.cfg) {
-			// Existing peer has an outdated config. Update it.
-			l.Log("op", "setNode", "node", node.Name, "msg", "removing outdated node peer")
-			if ep.bgp != nil {
-				if err := ep.bgp.Close(); err != nil {
-					l.Log("op", "setNode", "error", err, "peer", ep.cfg.Addr, "msg", "failed to shut down BGP session")
+		// TODO: Move to separate function?
+		if p == nil {
+			// Node has invalid/partial/missing peer config. If a node peer
+			// exists for this node, we need to remove it.
+			if peerExists {
+				l.Log("op", "setNode", "node", node.Name, "msg", "removing outdated node peer")
+				if ep.bgp != nil {
+					if err := ep.bgp.Close(); err != nil {
+						l.Log("op", "setNode", "error", err, "peer", ep.cfg.Addr, "msg", "failed to shut down BGP session")
+					}
 				}
+				delete(c.nodePeers, node.Name)
 			}
-			c.nodePeers[node.Name] = p
 		} else {
-			// Peer doesn't exist. Create it.
-			l.Log("op", "setNode", "node", node.Name, "msg", "creating node peer")
-			c.nodePeers[node.Name] = p
+			// Valid peer discovered.
+			if peerExists && !reflect.DeepEqual(ep.cfg, p.cfg) {
+				// Existing peer has an outdated config. Update it.
+				l.Log("op", "setNode", "node", node.Name, "msg", "removing outdated node peer")
+				if ep.bgp != nil {
+					if err := ep.bgp.Close(); err != nil {
+						l.Log("op", "setNode", "error", err, "peer", ep.cfg.Addr, "msg", "failed to shut down BGP session")
+					}
+				}
+				c.nodePeers[node.Name] = p
+			} else {
+				// Peer doesn't exist. Create it.
+				l.Log("op", "setNode", "node", node.Name, "msg", "creating node peer")
+				c.nodePeers[node.Name] = p
+			}
 		}
 	}
 
@@ -379,8 +389,25 @@ func discoverNodePeer(l log.Logger, pad *config.PeerAutodiscovery, node *v1.Node
 		password    string
 	)
 
+	// Method called with a nil or empty peer autodiscovery.
 	if pad == nil {
 		return nil, errors.New("nil peer autodiscovery")
+	}
+	if pad.FromAnnotations == nil && pad.FromLabels == nil {
+		return nil, errors.New("must specify FromAnnotations or FromLabels")
+	}
+
+	// If node labels don't match any peer autodiscovery node selector, we
+	// shouldn't try to discover a peer for this node.
+	shouldDiscover := false
+	for _, ns := range pad.NodeSelectors {
+		if ns.Matches(labels.Set(node.Labels)) {
+			shouldDiscover = true
+			break
+		}
+	}
+	if !shouldDiscover {
+		return nil, nil
 	}
 
 	if pad.FromLabels != nil {
