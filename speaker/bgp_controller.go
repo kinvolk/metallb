@@ -315,15 +315,15 @@ func (c *bgpController) SetNode(l log.Logger, node *v1.Node) error {
 	}
 
 	anns := labels.Set(nodeAnnotations)
-	ns := labels.Set(nodeLabels)
+	ls := labels.Set(nodeLabels)
 	annotationsUnchanged := c.nodeAnnotations != nil && labels.Equals(c.nodeAnnotations, anns)
-	labelsUnchanged := c.nodeLabels != nil && labels.Equals(c.nodeLabels, ns)
+	labelsUnchanged := c.nodeLabels != nil && labels.Equals(c.nodeLabels, ls)
 	if labelsUnchanged && annotationsUnchanged {
 		// Node labels and annotations unchanged, no action required.
 		return nil
 	}
 	c.nodeAnnotations = anns
-	c.nodeLabels = ns
+	c.nodeLabels = ls
 
 	// Attempt to create a BGP peer from node annotations and/or labels.
 	p, err := discoverNodePeer(l, c.peerAutodiscovery, node)
