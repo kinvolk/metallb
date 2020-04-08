@@ -1304,6 +1304,50 @@ func TestDiscoverNodePeer(t *testing.T) {
 			wantErr:  false,
 			wantPeer: nil,
 		},
+		{
+			desc: "Empty annotations",
+			node: &v1.Node{
+				ObjectMeta: metav1.ObjectMeta{
+					Annotations: map[string]string{
+						"example.com/my-asn": "",
+						"example.com/asn":    "",
+						"example.com/addr":   "",
+					},
+					Labels: map[string]string{
+						"kubernetes.io/hostname": "test",
+					},
+				},
+			},
+			pad: &config.PeerAutodiscovery{
+				NodeSelectors: []labels.Selector{
+					mustSelector(fmt.Sprintf("%s=%s", v1.LabelHostname, "test")),
+				},
+				FromAnnotations: pam,
+			},
+			wantErr:  true,
+			wantPeer: nil,
+		},
+		{
+			desc: "Empty labels",
+			node: &v1.Node{
+				ObjectMeta: metav1.ObjectMeta{
+					Labels: map[string]string{
+						"kubernetes.io/hostname": "test",
+						"example.com/my-asn":     "",
+						"example.com/asn":        "",
+						"example.com/addr":       "",
+					},
+				},
+			},
+			pad: &config.PeerAutodiscovery{
+				NodeSelectors: []labels.Selector{
+					mustSelector(fmt.Sprintf("%s=%s", v1.LabelHostname, "test")),
+				},
+				FromLabels: pam,
+			},
+			wantErr:  true,
+			wantPeer: nil,
+		},
 	}
 
 	l := log.NewNopLogger()
