@@ -393,9 +393,6 @@ func discoverNodePeer(l log.Logger, pad *config.PeerAutodiscovery, node *v1.Node
 	if pad == nil {
 		return nil, errors.New("nil peer autodiscovery")
 	}
-	if pad.FromAnnotations == nil && pad.FromLabels == nil {
-		return nil, errors.New("must specify FromAnnotations or FromLabels")
-	}
 
 	// If node labels don't match any peer autodiscovery node selector, we
 	// shouldn't try to discover a peer for this node.

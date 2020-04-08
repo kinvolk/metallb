@@ -1245,33 +1245,6 @@ func TestDiscoverNodePeer(t *testing.T) {
 			wantPeer: nil,
 		},
 		{
-			desc: "Empty peer autodiscovery",
-			node: &v1.Node{
-				ObjectMeta: metav1.ObjectMeta{
-					Annotations: map[string]string{
-						"example.com/my-asn":    "65000",
-						"example.com/asn":       "65001",
-						"example.com/addr":      "10.0.0.1",
-						"example.com/port":      "1179",
-						"example.com/hold-time": "30s",
-						"example.com/router-id": "10.0.0.2",
-					},
-					Labels: map[string]string{
-						"kubernetes.io/hostname": "test",
-						"example.com/my-asn":     "65000",
-						"example.com/asn":        "65001",
-						"example.com/addr":       "10.0.0.1",
-						"example.com/port":       "1179",
-						"example.com/hold-time":  "30s",
-						"example.com/router-id":  "10.0.0.2",
-					},
-				},
-			},
-			pad:      &config.PeerAutodiscovery{},
-			wantErr:  true,
-			wantPeer: nil,
-		},
-		{
 			desc: "Verify annotations get precedence over labels",
 			node: &v1.Node{
 				ObjectMeta: metav1.ObjectMeta{

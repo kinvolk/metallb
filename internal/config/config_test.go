@@ -675,6 +675,16 @@ peer-autodiscovery:
 				},
 			},
 		},
+
+		{
+			desc: "Peer autodiscovery - no mapping specified",
+			raw: `
+peer-autodiscovery:
+  node-selectors:
+  - match-labels:
+      foo: bar
+`,
+		},
 	}
 
 	for _, test := range tests {

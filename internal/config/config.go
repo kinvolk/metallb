@@ -402,6 +402,10 @@ func parsePeer(p peer) (*Peer, error) {
 func parsePeerAutodiscovery(p peerAutodiscovery) (*PeerAutodiscovery, error) {
 	pad := &PeerAutodiscovery{}
 
+	if p.FromAnnotations == nil && p.FromLabels == nil {
+		return nil, errors.New("missing from-annotations or from-labels")
+	}
+
 	if p.Defaults != nil {
 		pad.Defaults = &PeerAutodiscoveryDefaults{
 			ASN:   p.Defaults.ASN,
