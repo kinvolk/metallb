@@ -399,6 +399,18 @@ func parsePeer(p peer) (*Peer, error) {
 	}, nil
 }
 
+// Parse peer autodiscovery configuration.
+//
+// BGP peer configuration can be specified in either annotations or labels. If
+// the same parameter is specified using both annotations and labels, the value
+// specified in annotations is used. If a parameter isn't specified in
+// annotations nor in labels, a default value - if configured - is used.
+//
+// If a required BGP parameter isn't specified in annotations, labels or
+// defaults, an error is returned. Required parameters:
+// - Local ASN
+// - Peer ASN
+// - Peer address
 func parsePeerAutodiscovery(p peerAutodiscovery) (*PeerAutodiscovery, error) {
 	pad := &PeerAutodiscovery{}
 

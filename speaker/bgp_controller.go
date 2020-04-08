@@ -374,9 +374,8 @@ func (c *bgpController) SetNode(l log.Logger, node *v1.Node) error {
 }
 
 // discoverNodePeer attempts to construct a BGP peer from information conveyed
-// in node annotations and labels.
-//
-// TODO: Explain precedence and defaults behavior.
+// in node annotations and labels using the specified autodiscovery
+// configuration.
 func discoverNodePeer(l log.Logger, pad *config.PeerAutodiscovery, node *v1.Node) (*peer, error) {
 	var (
 		myASN       uint32
