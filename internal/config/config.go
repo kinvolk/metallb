@@ -49,10 +49,17 @@ type peer struct {
 }
 
 type peerAutodiscovery struct {
-	// TODO: Add Defaults field.
-	NodeSelectors   []nodeSelector           `yaml:"node-selectors"`
-	FromAnnotations peerAutodiscoveryMapping `yaml:"from-annotations"`
-	FromLabels      peerAutodiscoveryMapping `yaml:"from-labels"`
+	Defaults        peerAutodiscoveryDefaults `yaml:"defaults"`
+	NodeSelectors   []nodeSelector            `yaml:"node-selectors"`
+	FromAnnotations peerAutodiscoveryMapping  `yaml:"from-annotations"`
+	FromLabels      peerAutodiscoveryMapping  `yaml:"from-labels"`
+}
+
+type peerAutodiscoveryDefaults struct {
+	MyASN    uint32 `yaml:"my-asn"`
+	ASN      uint32 `yaml:"peer-asn"`
+	Port     uint16 `yaml:"peer-port"`
+	HoldTime string `yaml:"hold-time"`
 }
 
 type peerAutodiscoveryMapping struct {
@@ -131,6 +138,21 @@ type Peer struct {
 	// TODO: more BGP session settings
 }
 
+// PeerAutodiscoveryDefaults specifies BGP peering parameters which can be set
+// globally for all autodiscovered peers. Node-specific BGP parameters such as
+// router ID or peer address can't be configured globally and therefore aren't
+// exposed.
+type PeerAutodiscoveryDefaults struct {
+	// AS number to use for the local end of the session.
+	MyASN uint32
+	// AS number to expect from the remote end of the session.
+	ASN uint32
+	// Port to dial when establishing the session.
+	Port uint16
+	// Requested BGP hold time, per RFC4271.
+	HoldTime time.Duration
+}
+
 // PeerAutodiscoveryMapping maps BGP peering configuration parameters to node
 // annotations or labels to allow automatic discovery of BGP configuration
 // from Node objects.
@@ -161,10 +183,11 @@ type PeerAutodiscoveryMapping struct {
 // and/or labels. It allows the user to tell MetalLB to retrieve BGP peering
 // configuration dynamically rather than from a static configuration file.
 type PeerAutodiscovery struct {
-	// NodeSelectors indicates the nodes for which peer autodiscovery should be
-	// enabled. When no selectors are specified, peer autodiscovery will be
-	// attempted for any node.
-	NodeSelectors []labels.Selector
+	// Defaults specifies BGP peering parameters which should be used for all
+	// autodiscovered peers. The default value of a parameter is used when the
+	// same parameter can't be retrieved from annotations/labels on the Node
+	// object.
+	Defaults *PeerAutodiscoveryDefaults
 	// FromAnnotations tells MetalLB to retrieve BGP peering configuration for
 	// a node by looking up specific annotations on the corresponding Node
 	// object.
@@ -172,6 +195,10 @@ type PeerAutodiscovery struct {
 	// FromLabels tells MetalLB to retrieve BGP peering configuration for
 	// a node by looking up specific labels on the corresponding Node object.
 	FromLabels *PeerAutodiscoveryMapping
+	// NodeSelectors indicates the nodes for which peer autodiscovery should be
+	// enabled. When no selectors are specified, peer autodiscovery will be
+	// attempted for any node.
+	NodeSelectors []labels.Selector
 }
 
 // Pool is the configuration of an IP address pool.
@@ -389,8 +416,18 @@ func parsePeerAutodiscovery(p peerAutodiscovery) (*PeerAutodiscovery, error) {
 		}
 	}
 
+	defaultHoldTime, err := parseHoldTime(p.Defaults.HoldTime)
+	if err != nil {
+		return nil, fmt.Errorf("parsing default hold time: %s", err)
+	}
+
 	pad := &PeerAutodiscovery{
-		NodeSelectors: nodeSels,
+		Defaults: &PeerAutodiscoveryDefaults{
+			ASN:      p.Defaults.ASN,
+			MyASN:    p.Defaults.MyASN,
+			Port:     p.Defaults.Port,
+			HoldTime: defaultHoldTime,
+		},
 		FromAnnotations: &PeerAutodiscoveryMapping{
 			ASN:      p.FromAnnotations.ASN,
 			Addr:     p.FromAnnotations.Addr,
@@ -407,6 +444,7 @@ func parsePeerAutodiscovery(p peerAutodiscovery) (*PeerAutodiscovery, error) {
 			Port:     p.FromLabels.Port,
 			RouterID: p.FromLabels.RouterID,
 		},
+		NodeSelectors: nodeSels,
 	}
 
 	return pad, nil

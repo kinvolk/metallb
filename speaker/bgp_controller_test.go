@@ -1183,6 +1183,42 @@ func TestDiscoverNodePeer(t *testing.T) {
 			},
 		},
 		{
+			desc: "Use all defaults",
+			node: &v1.Node{
+				ObjectMeta: metav1.ObjectMeta{
+					Annotations: map[string]string{
+						"example.com/addr": "10.0.0.1",
+					},
+					Labels: map[string]string{
+						"kubernetes.io/hostname": "test",
+					},
+				},
+			},
+			pad: &config.PeerAutodiscovery{
+				Defaults: &config.PeerAutodiscoveryDefaults{
+					ASN:      65001,
+					MyASN:    65000,
+					Port:     1179,
+					HoldTime: 30 * time.Second,
+				},
+				FromAnnotations: pam,
+				NodeSelectors:   []labels.Selector{labels.Everything()},
+			},
+			wantErr: false,
+			wantPeer: &peer{
+				cfg: &config.Peer{
+					ASN:      65001,
+					MyASN:    65000,
+					Addr:     net.ParseIP("10.0.0.1"),
+					HoldTime: 30 * time.Second,
+					Port:     1179,
+					NodeSelectors: []labels.Selector{
+						mustSelector(fmt.Sprintf("%s=%s", v1.LabelHostname, "test")),
+					},
+				},
+			},
+		},
+		{
 			desc: "Nil peer autodiscovery",
 			node: &v1.Node{
 				ObjectMeta: metav1.ObjectMeta{

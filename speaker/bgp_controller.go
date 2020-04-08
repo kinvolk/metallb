@@ -410,6 +410,23 @@ func discoverNodePeer(l log.Logger, pad *config.PeerAutodiscovery, node *v1.Node
 		return nil, nil
 	}
 
+	// Set defaults. Parameter values read from labels/annotations override the
+	// values set here.
+	if pad.Defaults != nil {
+		if pad.Defaults.ASN != 0 {
+			peerASN = pad.Defaults.ASN
+		}
+		if pad.Defaults.MyASN != 0 {
+			myASN = pad.Defaults.MyASN
+		}
+		if pad.Defaults.Port != 0 {
+			peerPort = pad.Defaults.Port
+		}
+		if pad.Defaults.HoldTime != 0 {
+			holdTime = pad.Defaults.HoldTime
+		}
+	}
+
 	if pad.FromLabels != nil {
 		for k, v := range node.Labels {
 			switch k {
@@ -500,11 +517,15 @@ func discoverNodePeer(l log.Logger, pad *config.PeerAutodiscovery, node *v1.Node
 		peerPort = 179
 	}
 
-	ht, err := parseHoldTime(holdTimeRaw)
-	if err != nil {
-		return nil, fmt.Errorf("parsing hold time: %v", err)
+	if holdTime == 0 {
+		// Hold time not specified in autodiscovery defaults - try to parse the
+		// hold time from labels/annotations.
+		ht, err := parseHoldTime(holdTimeRaw)
+		if err != nil {
+			return nil, fmt.Errorf("parsing hold time: %v", err)
+		}
+		holdTime = ht
 	}
-	holdTime = ht
 
 	// The peer is configured on a specific node object, so we want
 	// to create a BGP session only on that node.

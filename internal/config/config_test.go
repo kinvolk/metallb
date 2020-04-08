@@ -68,6 +68,11 @@ peer-autodiscovery:
       foo: bar
     match-expressions:
       - {key: bar, operator: In, values: [quux]}
+  defaults:
+    my-asn: 100
+    peer-asn: 200
+    peer-port: 1179
+    hold-time: 180s
   from-annotations:
     my-asn: example.com/my-asn
     peer-asn: example.com/peer-asn
@@ -135,6 +140,12 @@ address-pools:
 				PeerAutodiscovery: &PeerAutodiscovery{
 					NodeSelectors: []labels.Selector{
 						selector("bar in (quux),foo=bar"),
+					},
+					Defaults: &PeerAutodiscoveryDefaults{
+						MyASN:    100,
+						ASN:      200,
+						Port:     1179,
+						HoldTime: 180 * time.Second,
 					},
 					FromAnnotations: &PeerAutodiscoveryMapping{
 						MyASN:    "example.com/my-asn",
