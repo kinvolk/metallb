@@ -685,6 +685,65 @@ peer-autodiscovery:
       foo: bar
 `,
 		},
+
+		{
+			desc: "Peer autodiscovery - missing local ASN",
+			raw: `
+peer-autodiscovery:
+  from-annotations:
+    peer-asn: foo
+    peer-address: bar
+`,
+		},
+
+		{
+			desc: "Peer autodiscovery - missing peer ASN",
+			raw: `
+peer-autodiscovery:
+  from-annotations:
+    my-asn: foo
+    peer-address: bar
+`,
+		},
+
+		{
+			desc: "Peer autodiscovery - missing peer address",
+			raw: `
+peer-autodiscovery:
+  from-annotations:
+    peer-asn: foo
+    peer-address: bar
+`,
+		},
+
+		{
+			desc: "Peer autodiscovery - defaults",
+			raw: `
+peer-autodiscovery:
+  defaults:
+    my-asn: 100
+    peer-asn: 200
+    peer-port: 1179
+    hold-time: 30s
+  from-annotations:
+    peer-address: foo
+`,
+			want: &Config{
+				Pools: map[string]*Pool{},
+				PeerAutodiscovery: &PeerAutodiscovery{
+					Defaults: &PeerAutodiscoveryDefaults{
+						MyASN:    100,
+						ASN:      200,
+						Port:     1179,
+						HoldTime: 30 * time.Second,
+					},
+					FromAnnotations: &PeerAutodiscoveryMapping{
+						Addr: "foo",
+					},
+					NodeSelectors: []labels.Selector{labels.Everything()},
+				},
+			},
+		},
 	}
 
 	for _, test := range tests {

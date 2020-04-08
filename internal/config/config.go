@@ -461,6 +461,10 @@ func parsePeerAutodiscovery(p peerAutodiscovery) (*PeerAutodiscovery, error) {
 	}
 	pad.NodeSelectors = nodeSels
 
+	if err := validatePeerAutodiscovery(*pad); err != nil {
+		return nil, fmt.Errorf("validating peer autodiscovery: %s", err)
+	}
+
 	return pad, nil
 }
 
@@ -636,4 +640,60 @@ func isIPv4(ip net.IP) bool {
 
 func isIPv6(ip net.IP) bool {
 	return ip.To16() != nil && ip.To4() == nil
+}
+
+// Verify that peer autodiscovery config is specified for all required BGP
+// params, or that default values are in place.
+//
+// Local ASN and peer ASN can be specified in annotations, labels or defaults.
+// Peer address can be specified in annotations or labels.
+func validatePeerAutodiscovery(p PeerAutodiscovery) error {
+	var localASNOK bool
+	var peerASNOK bool
+	var peerAddressOK bool
+
+	if d := p.Defaults; d != nil {
+		if d.MyASN != 0 {
+			localASNOK = true
+		}
+		if d.ASN != 0 {
+			peerASNOK = true
+		}
+	}
+
+	if a := p.FromAnnotations; a != nil {
+		if a.MyASN != "" {
+			localASNOK = true
+		}
+		if a.ASN != "" {
+			peerASNOK = true
+		}
+		if a.Addr != "" {
+			peerAddressOK = true
+		}
+	}
+
+	if l := p.FromLabels; l != nil {
+		if l.MyASN != "" {
+			localASNOK = true
+		}
+		if l.ASN != "" {
+			peerASNOK = true
+		}
+		if l.Addr != "" {
+			peerAddressOK = true
+		}
+	}
+
+	if !localASNOK {
+		return errors.New("local ASN missing and no default specified")
+	}
+	if !peerASNOK {
+		return errors.New("peer ASN missing and no default specified")
+	}
+	if !peerAddressOK {
+		return errors.New("peer address missing")
+	}
+
+	return nil
 }
