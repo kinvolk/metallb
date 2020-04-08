@@ -49,10 +49,10 @@ type peer struct {
 }
 
 type peerAutodiscovery struct {
-	Defaults        peerAutodiscoveryDefaults `yaml:"defaults"`
-	NodeSelectors   []nodeSelector            `yaml:"node-selectors"`
-	FromAnnotations peerAutodiscoveryMapping  `yaml:"from-annotations"`
-	FromLabels      peerAutodiscoveryMapping  `yaml:"from-labels"`
+	Defaults        *peerAutodiscoveryDefaults `yaml:"defaults"`
+	NodeSelectors   []nodeSelector             `yaml:"node-selectors"`
+	FromAnnotations *peerAutodiscoveryMapping  `yaml:"from-annotations"`
+	FromLabels      *peerAutodiscoveryMapping  `yaml:"from-labels"`
 }
 
 type peerAutodiscoveryDefaults struct {
@@ -400,6 +400,46 @@ func parsePeer(p peer) (*Peer, error) {
 }
 
 func parsePeerAutodiscovery(p peerAutodiscovery) (*PeerAutodiscovery, error) {
+	pad := &PeerAutodiscovery{}
+
+	if p.Defaults != nil {
+		pad.Defaults = &PeerAutodiscoveryDefaults{
+			ASN:   p.Defaults.ASN,
+			MyASN: p.Defaults.MyASN,
+			Port:  p.Defaults.Port,
+		}
+
+		if p.Defaults.HoldTime != "" {
+			ht, err := parseHoldTime(p.Defaults.HoldTime)
+			if err != nil {
+				return nil, fmt.Errorf("parsing default hold time: %s", err)
+			}
+			pad.Defaults.HoldTime = ht
+		}
+	}
+
+	if p.FromAnnotations != nil {
+		pad.FromAnnotations = &PeerAutodiscoveryMapping{
+			ASN:      p.FromAnnotations.ASN,
+			Addr:     p.FromAnnotations.Addr,
+			HoldTime: p.FromAnnotations.HoldTime,
+			MyASN:    p.FromAnnotations.MyASN,
+			Port:     p.FromAnnotations.Port,
+			RouterID: p.FromAnnotations.RouterID,
+		}
+	}
+
+	if p.FromLabels != nil {
+		pad.FromLabels = &PeerAutodiscoveryMapping{
+			ASN:      p.FromLabels.ASN,
+			Addr:     p.FromLabels.Addr,
+			HoldTime: p.FromLabels.HoldTime,
+			MyASN:    p.FromLabels.MyASN,
+			Port:     p.FromLabels.Port,
+			RouterID: p.FromLabels.RouterID,
+		}
+	}
+
 	// We use a non-pointer in the raw json object, so that if the
 	// user doesn't provide a node selector, we end up with an empty,
 	// but non-nil selector, which means "select everything".
@@ -415,37 +455,7 @@ func parsePeerAutodiscovery(p peerAutodiscovery) (*PeerAutodiscovery, error) {
 			nodeSels = append(nodeSels, nodeSel)
 		}
 	}
-
-	defaultHoldTime, err := parseHoldTime(p.Defaults.HoldTime)
-	if err != nil {
-		return nil, fmt.Errorf("parsing default hold time: %s", err)
-	}
-
-	pad := &PeerAutodiscovery{
-		Defaults: &PeerAutodiscoveryDefaults{
-			ASN:      p.Defaults.ASN,
-			MyASN:    p.Defaults.MyASN,
-			Port:     p.Defaults.Port,
-			HoldTime: defaultHoldTime,
-		},
-		FromAnnotations: &PeerAutodiscoveryMapping{
-			ASN:      p.FromAnnotations.ASN,
-			Addr:     p.FromAnnotations.Addr,
-			HoldTime: p.FromAnnotations.HoldTime,
-			MyASN:    p.FromAnnotations.MyASN,
-			Port:     p.FromAnnotations.Port,
-			RouterID: p.FromAnnotations.RouterID,
-		},
-		FromLabels: &PeerAutodiscoveryMapping{
-			ASN:      p.FromLabels.ASN,
-			Addr:     p.FromLabels.Addr,
-			HoldTime: p.FromLabels.HoldTime,
-			MyASN:    p.FromLabels.MyASN,
-			Port:     p.FromLabels.Port,
-			RouterID: p.FromLabels.RouterID,
-		},
-		NodeSelectors: nodeSels,
-	}
+	pad.NodeSelectors = nodeSels
 
 	return pad, nil
 }

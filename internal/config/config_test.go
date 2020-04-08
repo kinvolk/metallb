@@ -653,6 +653,28 @@ address-pools:
   - communities: ["flarb"]
 `,
 		},
+
+		{
+			desc: "Peer autodiscovery - minimal config",
+			raw: `
+peer-autodiscovery:
+  from-annotations:
+    my-asn: example.com/my-asn
+    peer-asn: example.com/peer-asn
+    peer-address: example.com/peer-address
+`,
+			want: &Config{
+				Pools: map[string]*Pool{},
+				PeerAutodiscovery: &PeerAutodiscovery{
+					FromAnnotations: &PeerAutodiscoveryMapping{
+						MyASN: "example.com/my-asn",
+						ASN:   "example.com/peer-asn",
+						Addr:  "example.com/peer-address",
+					},
+					NodeSelectors: []labels.Selector{labels.Everything()},
+				},
+			},
+		},
 	}
 
 	for _, test := range tests {
