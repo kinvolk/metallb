@@ -183,7 +183,7 @@ func (c *bgpController) syncPeers(l log.Logger) error {
 			return err
 		}
 	}
-	if errs > 0 {
+	if totalErrs > 0 {
 		return fmt.Errorf("%d BGP sessions failed to start", errs)
 	}
 	return nil
