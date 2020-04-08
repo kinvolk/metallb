@@ -191,6 +191,10 @@ func (c *bgpController) syncPeers(l log.Logger) error {
 
 // Attempt to create a BGP peer from node annotations and/or labels if peer
 // autodiscovery is configured.
+//
+// TODO: This method is called only on changes to Node objects. This means that
+// when peer autodiscovery config is changed, node peers won't be synced until
+// the relevant Node object changes.
 func (c *bgpController) syncNodePeer(l log.Logger, node *v1.Node) {
 	if c.peerAutodiscovery == nil {
 		return
