@@ -1109,6 +1109,7 @@ func TestDiscoverNodePeer(t *testing.T) {
 					},
 					RouterID: net.ParseIP("10.0.0.2"),
 				},
+				nodePeer: true,
 			},
 		},
 		{
@@ -1143,6 +1144,7 @@ func TestDiscoverNodePeer(t *testing.T) {
 					},
 					RouterID: net.ParseIP("10.0.0.2"),
 				},
+				nodePeer: true,
 			},
 		},
 		{
@@ -1180,6 +1182,7 @@ func TestDiscoverNodePeer(t *testing.T) {
 					},
 					RouterID: net.ParseIP("10.0.0.2"),
 				},
+				nodePeer: true,
 			},
 		},
 		{
@@ -1216,6 +1219,7 @@ func TestDiscoverNodePeer(t *testing.T) {
 						mustSelector(fmt.Sprintf("%s=%s", v1.LabelHostname, "test")),
 					},
 				},
+				nodePeer: true,
 			},
 		},
 		{
@@ -1285,6 +1289,7 @@ func TestDiscoverNodePeer(t *testing.T) {
 					},
 					RouterID: net.ParseIP("10.0.0.2"),
 				},
+				nodePeer: true,
 			},
 		},
 		{

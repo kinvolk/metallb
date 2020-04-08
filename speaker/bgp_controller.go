@@ -33,8 +33,9 @@ import (
 )
 
 type peer struct {
-	cfg *config.Peer
-	bgp session
+	cfg      *config.Peer
+	bgp      session
+	nodePeer bool
 }
 
 type bgpController struct {
@@ -42,7 +43,6 @@ type bgpController struct {
 	myNode            string
 	nodeAnnotations   labels.Set
 	nodeLabels        labels.Set
-	nodePeer          *peer
 	peerAutodiscovery *config.PeerAutodiscovery
 	peers             []*peer
 	svcAds            map[string][]*bgp.Advertisement
@@ -168,14 +168,6 @@ func (c *bgpController) syncPeers(l log.Logger) error {
 	totalErrs += errs
 	l.Log("op", "syncBGPSessions", "needUpdate", update, "errs", errs, "msg", "done syncing peer BGP sessions")
 
-	// Update node peer BGP session.
-	if c.nodePeer != nil {
-		update, errs = c.syncBGPSessions(l, []*peer{c.nodePeer})
-		needUpdateAds += update
-		totalErrs += errs
-	}
-	l.Log("op", "syncBGPSessions", "needUpdate", update, "errs", errs, "msg", "done syncing node peer BGP session")
-
 	if needUpdateAds > 0 {
 		// Some new sessions came up, resync advertisement state.
 		if err := c.updateAds(); err != nil {
@@ -200,7 +192,16 @@ func (c *bgpController) syncNodePeer(l log.Logger, node *v1.Node) {
 		return
 	}
 
-	peerExists := c.nodePeer != nil
+	var np *peer
+	npIndex := -1
+	for i, p := range c.peers {
+		if p.nodePeer {
+			np = p
+			npIndex = i
+		}
+	}
+	peerExists := np != nil
+
 	p, err := discoverNodePeer(l, c.peerAutodiscovery, node)
 	if err != nil {
 		// Log an error without returning to let the user know why peer
@@ -215,32 +216,33 @@ func (c *bgpController) syncNodePeer(l log.Logger, node *v1.Node) {
 		// for this node, we need to remove it.
 		if peerExists {
 			l.Log("op", "setNode", "node", node.Name, "msg", "removing outdated node peer")
-			if c.nodePeer.bgp != nil {
-				if err := c.nodePeer.bgp.Close(); err != nil {
-					l.Log("op", "setNode", "error", err, "peer", c.nodePeer.cfg.Addr, "msg", "failed to shut down BGP session")
+			if np.bgp != nil {
+				if err := np.bgp.Close(); err != nil {
+					l.Log("op", "setNode", "error", err, "peer", np.cfg.Addr, "msg", "failed to shut down BGP session")
 				}
 			}
-			c.nodePeer = nil
+			peers := append(c.peers[:npIndex], c.peers[npIndex+1:]...)
+			c.peers = peers
 		}
 		return
 	}
 
 	// Valid peer discovered.
-	if peerExists && !reflect.DeepEqual(c.nodePeer.cfg, p.cfg) {
+	if peerExists && !reflect.DeepEqual(np.cfg, p.cfg) {
 		// Existing peer has an outdated config. Update it.
 		l.Log("op", "setNode", "node", node.Name, "msg", "removing outdated node peer")
-		if c.nodePeer.bgp != nil {
-			if err := c.nodePeer.bgp.Close(); err != nil {
-				l.Log("op", "setNode", "error", err, "peer", c.nodePeer.cfg.Addr, "msg", "failed to shut down BGP session")
+		if np.bgp != nil {
+			if err := np.bgp.Close(); err != nil {
+				l.Log("op", "setNode", "error", err, "peer", np.cfg.Addr, "msg", "failed to shut down BGP session")
 			}
 		}
-		c.nodePeer = p
+		c.peers[npIndex] = p
 		return
 	}
 
 	// Peer doesn't exist. Create it.
 	l.Log("op", "setNode", "node", node.Name, "msg", "creating node peer")
-	c.nodePeer = p
+	c.peers = append(c.peers, p)
 
 	return
 }
@@ -330,13 +332,6 @@ func (c *bgpController) updateAds() error {
 		}
 		if err := peer.bgp.Set(allAds...); err != nil {
 			return err
-		}
-	}
-	if np := c.nodePeer; np != nil {
-		if np.bgp != nil {
-			if err := np.bgp.Set(allAds...); err != nil {
-				return err
-			}
 		}
 	}
 	return nil
@@ -557,6 +552,7 @@ func discoverNodePeer(l log.Logger, pad *config.PeerAutodiscovery, node *v1.Node
 			NodeSelectors: []labels.Selector{ns},
 			Password:      password,
 		},
+		nodePeer: true,
 	}
 
 	return p, nil
