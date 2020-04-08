@@ -497,15 +497,16 @@ func discoverNodePeer(l log.Logger, pad *config.PeerAutodiscovery, node *v1.Node
 		}
 	}
 
-	// Verify required peer config.
+	// Verify required peer config. We shouldn't get errors here because we
+	// validate the configuration. This check is here just for safety.
+	if myASN == 0 {
+		return nil, errors.New("missing local ASN")
+	}
 	if peerASN == 0 {
-		return nil, errors.New("peer ASN must be set")
+		return nil, errors.New("missing peer ASN")
 	}
 	if peerAddr == nil {
-		return nil, errors.New("peer address must be set")
-	}
-	if myASN == 0 {
-		return nil, errors.New("local ASN must be set")
+		return nil, errors.New("missing peer address")
 	}
 
 	// Set default BGP port if unspecified by user.
