@@ -170,7 +170,6 @@ type PeerAutodiscoveryDefaults struct {
 // both annotations and labels use string keys, a PeerAutodiscoveryMapping can
 // be used to map to both annotations and labels.
 type PeerAutodiscoveryMapping struct {
-	// TODO: Document fields.
 	MyASN    string
 	ASN      string
 	Addr     string

@@ -524,9 +524,8 @@ func discoverNodePeer(l log.Logger, pad *config.PeerAutodiscovery, node *v1.Node
 		holdTime = ht
 	}
 
-	// The peer is configured on a specific node object, so we want
-	// to create a BGP session only on that node.
-	// TODO: Is it legal to have a Node object without a hostname label?
+	// The peer is configured on a specific node object, so we want to create a
+	// BGP session only on that node.
 	h := node.Labels[v1.LabelHostname]
 	if h == "" {
 		return nil, fmt.Errorf("label %s not found on node", v1.LabelHostname)
@@ -552,7 +551,6 @@ func discoverNodePeer(l log.Logger, pad *config.PeerAutodiscovery, node *v1.Node
 	return p, nil
 }
 
-// TODO: Copied as-is from config package. Need to refactor to make this DRY.
 func parseHoldTime(ht string) (time.Duration, error) {
 	if ht == "" {
 		return 90 * time.Second, nil
