@@ -20,6 +20,7 @@ import (
 	"fmt"
 	golog "log"
 	"net"
+	"net/http"
 	"os"
 	"os/signal"
 	"strconv"
@@ -69,17 +70,19 @@ func main() {
 	}
 
 	var (
-		config      = flag.String("config", "config", "Kubernetes ConfigMap containing MetalLB's configuration")
+		configMap   = flag.String("config", "config", "Kubernetes ConfigMap containing MetalLB's configuration")
 		configNS    = flag.String("config-ns", "", "config file namespace (only needed when running outside of k8s)")
 		kubeconfig  = flag.String("kubeconfig", "", "absolute path to the kubeconfig file (only needed when running outside of k8s)")
-		host        = flag.String("host", os.Getenv("METALLB_HOST"), "HTTP host address")
+		metricsHost = flag.String("metrics-host", os.Getenv("METALLB_METRICS_HOST"), "Bind address for Prometheus metrics")
+		metricsPort = flag.Int("metrics-port", 80, "Bind port for Prometheus metrics")
 		mlBindAddr  = flag.String("ml-bindaddr", os.Getenv("METALLB_ML_BIND_ADDR"), "Bind addr for MemberList (fast dead node detection)")
 		mlBindPort  = flag.String("ml-bindport", os.Getenv("METALLB_ML_BIND_PORT"), "Bind port for MemberList (fast dead node detection)")
 		mlLabels    = flag.String("ml-labels", os.Getenv("METALLB_ML_LABELS"), "Labels to match the speakers (for MemberList / fast dead node detection)")
 		mlNamespace = flag.String("ml-namespace", os.Getenv("METALLB_ML_NAMESPACE"), "Namespace of the speakers (for MemberList / fast dead node detection)")
 		mlSecret    = flag.String("ml-secret-key", os.Getenv("METALLB_ML_SECRET_KEY"), "Secret key for MemberList (fast dead node detection)")
 		myNode      = flag.String("node-name", os.Getenv("METALLB_NODE_NAME"), "name of this Kubernetes node (spec.nodeName)")
-		port        = flag.Int("port", 80, "HTTP listening port")
+		statusHost  = flag.String("status-host", os.Getenv("METALLB_STATUS_HOST"), "Bind address for status endpoint")
+		statusPort  = flag.Int("status-port", 8080, "Bind port for status endpoint")
 	)
 	flag.Parse()
 
@@ -147,14 +150,14 @@ func main() {
 
 	client, err := k8s.New(&k8s.Config{
 		ProcessName:   "metallb-speaker",
-		ConfigMapName: *config,
+		ConfigMapName: *configMap,
 		ConfigMapNS:   *configNS,
 		NodeName:      *myNode,
 		Logger:        logger,
 		Kubeconfig:    *kubeconfig,
 
-		MetricsHost:   *host,
-		MetricsPort:   *port,
+		MetricsHost:   *metricsHost,
+		MetricsPort:   *metricsPort,
 		ReadEndpoints: true,
 
 		ServiceChanged: ctrl.SetBalancer,
@@ -185,6 +188,19 @@ func main() {
 			logger.Log("op", "shutdown", "msg", "MemberList shutdown", "error ?", err)
 		}()
 	}
+
+	// Serve status for each protocol over HTTP.
+	for p := range ctrl.protocols {
+		http.HandleFunc(fmt.Sprintf("/status/%s", p), ctrl.protocols[p].StatusHandler())
+	}
+	go func() {
+		addr := net.JoinHostPort(*statusHost, strconv.Itoa(*statusPort))
+		logger.Log("op", "startup", "msg", fmt.Sprintf("starting status endpoint at %s", addr))
+		err := http.ListenAndServe(addr, nil)
+		if err != nil {
+			logger.Log("op", "startup", "error", err, "msg", "listening for status requests")
+		}
+	}()
 
 	if err := client.Run(stopCh); err != nil {
 		logger.Log("op", "startup", "error", err, "msg", "failed to run k8s client")
@@ -428,4 +444,5 @@ type Protocol interface {
 	SetBalancer(gokitlog.Logger, string, net.IP, *config.Pool) error
 	DeleteBalancer(gokitlog.Logger, string, string) error
 	SetNode(gokitlog.Logger, *v1.Node) error
+	StatusHandler() func(w http.ResponseWriter, r *http.Request)
 }

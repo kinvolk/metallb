@@ -17,14 +17,16 @@ package main
 import (
 	"bytes"
 	"crypto/sha256"
+	"fmt"
 	"net"
+	"net/http"
 	"sort"
 
 	"github.com/go-kit/kit/log"
 	"github.com/hashicorp/memberlist"
 	"go.universe.tf/metallb/internal/config"
 	"go.universe.tf/metallb/internal/layer2"
-	"k8s.io/api/core/v1"
+	v1 "k8s.io/api/core/v1"
 )
 
 type layer2Controller struct {
@@ -111,4 +113,10 @@ func (c *layer2Controller) DeleteBalancer(l log.Logger, name, reason string) err
 
 func (c *layer2Controller) SetNode(log.Logger, *v1.Node) error {
 	return nil
+}
+
+func (c *layer2Controller) StatusHandler() func(w http.ResponseWriter, r *http.Request) {
+	return func(w http.ResponseWriter, r *http.Request) {
+		fmt.Fprintln(w, "not implemented")
+	}
 }
