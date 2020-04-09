@@ -20,6 +20,7 @@ import (
 	"fmt"
 	golog "log"
 	"net"
+	"net/http"
 	"os"
 	"os/signal"
 	"syscall"
@@ -68,7 +69,7 @@ func main() {
 	}
 
 	var (
-		config      = flag.String("config", "config", "Kubernetes ConfigMap containing MetalLB's configuration")
+		configMap   = flag.String("config", "config", "Kubernetes ConfigMap containing MetalLB's configuration")
 		host        = flag.String("host", os.Getenv("METALLB_HOST"), "HTTP host address")
 		mlBindAddr  = flag.String("ml-bindaddr", os.Getenv("METALLB_ML_BIND_ADDR"), "Bind addr for MemberList (fast dead node detection)")
 		mlLabels    = flag.String("ml-labels", os.Getenv("METALLB_ML_LABELS"), "Labels to match the speakers (for MemberList / fast dead node detection)")
@@ -133,7 +134,7 @@ func main() {
 
 	client, err := k8s.New(&k8s.Config{
 		ProcessName:   "metallb-speaker",
-		ConfigMapName: *config,
+		ConfigMapName: *configMap,
 		NodeName:      *myNode,
 		Logger:        logger,
 
@@ -169,6 +170,18 @@ func main() {
 			logger.Log("op", "shutdown", "msg", "MemberList shutdown", "error ?", err)
 		}()
 	}
+
+	// Serve stats for each protocol over HTTP.
+	for p := range ctrl.protocols {
+		http.HandleFunc(fmt.Sprintf("/stats/%s", p), ctrl.protocols[p].StatsHandler())
+	}
+	go func() {
+		logger.Log("op", "startup", "msg", "starting stats handler")
+		err := http.ListenAndServe(":8080", nil)
+		if err != nil {
+			logger.Log("op", "startup", "error", err, "msg", "listening for stats requests")
+		}
+	}()
 
 	if err := client.Run(stopCh); err != nil {
 		logger.Log("op", "startup", "error", err, "msg", "failed to run k8s client")
@@ -427,4 +440,5 @@ type Protocol interface {
 	SetBalancer(gokitlog.Logger, string, net.IP, *config.Pool) error
 	DeleteBalancer(gokitlog.Logger, string, string) error
 	SetNode(gokitlog.Logger, *v1.Node) error
+	StatsHandler() func(w http.ResponseWriter, r *http.Request)
 }

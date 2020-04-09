@@ -15,10 +15,12 @@
 package main
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
 	"net"
+	"net/http"
 	"reflect"
 	"sort"
 	"strconv"
@@ -33,9 +35,9 @@ import (
 )
 
 type peer struct {
-	cfg      *config.Peer
-	bgp      session
-	nodePeer bool
+	Cfg      *config.Peer
+	BGP      session
+	NodePeer bool
 }
 
 type bgpController struct {
@@ -58,7 +60,7 @@ newPeers:
 			if ep == nil {
 				continue
 			}
-			if reflect.DeepEqual(p, ep.cfg) {
+			if reflect.DeepEqual(p, ep.Cfg) {
 				newPeers = append(newPeers, ep)
 				c.peers[i] = nil
 				continue newPeers
@@ -66,7 +68,7 @@ newPeers:
 		}
 		// No existing peers match, create a new one.
 		newPeers = append(newPeers, &peer{
-			cfg: p,
+			Cfg: p,
 		})
 	}
 
@@ -77,10 +79,10 @@ newPeers:
 		if p == nil {
 			continue
 		}
-		l.Log("event", "peerRemoved", "peer", p.cfg.Addr, "reason", "removedFromConfig", "msg", "peer deconfigured, closing BGP session")
-		if p.bgp != nil {
-			if err := p.bgp.Close(); err != nil {
-				l.Log("op", "setConfig", "error", err, "peer", p.cfg.Addr, "msg", "failed to shut down BGP session")
+		l.Log("event", "peerRemoved", "peer", p.Cfg.Addr, "reason", "removedFromConfig", "msg", "peer deconfigured, closing BGP session")
+		if p.BGP != nil {
+			if err := p.BGP.Close(); err != nil {
+				l.Log("op", "setConfig", "error", err, "peer", p.Cfg.Addr, "msg", "failed to shut down BGP session")
 			}
 		}
 	}
@@ -195,7 +197,7 @@ func (c *bgpController) syncNodePeer(l log.Logger, node *v1.Node) {
 	var np *peer
 	npIndex := -1
 	for i, p := range c.peers {
-		if p.nodePeer {
+		if p.NodePeer {
 			np = p
 			npIndex = i
 		}
@@ -216,9 +218,9 @@ func (c *bgpController) syncNodePeer(l log.Logger, node *v1.Node) {
 		// for this node, we need to remove it.
 		if peerExists {
 			l.Log("op", "setNode", "node", node.Name, "msg", "removing outdated node peer")
-			if np.bgp != nil {
-				if err := np.bgp.Close(); err != nil {
-					l.Log("op", "setNode", "error", err, "peer", np.cfg.Addr, "msg", "failed to shut down BGP session")
+			if np.BGP != nil {
+				if err := np.BGP.Close(); err != nil {
+					l.Log("op", "setNode", "error", err, "peer", np.Cfg.Addr, "msg", "failed to shut down BGP session")
 				}
 			}
 			peers := append(c.peers[:npIndex], c.peers[npIndex+1:]...)
@@ -228,12 +230,12 @@ func (c *bgpController) syncNodePeer(l log.Logger, node *v1.Node) {
 	}
 
 	// Valid peer discovered.
-	if peerExists && !reflect.DeepEqual(np.cfg, p.cfg) {
+	if peerExists && !reflect.DeepEqual(np.Cfg, p.Cfg) {
 		// Existing peer has an outdated config. Update it.
 		l.Log("op", "setNode", "node", node.Name, "msg", "removing outdated node peer")
-		if np.bgp != nil {
-			if err := np.bgp.Close(); err != nil {
-				l.Log("op", "setNode", "error", err, "peer", np.cfg.Addr, "msg", "failed to shut down BGP session")
+		if np.BGP != nil {
+			if err := np.BGP.Close(); err != nil {
+				l.Log("op", "setNode", "error", err, "peer", np.Cfg.Addr, "msg", "failed to shut down BGP session")
 			}
 		}
 		c.peers[npIndex] = p
@@ -252,7 +254,7 @@ func (c *bgpController) syncBGPSessions(l log.Logger, peers []*peer) (needUpdate
 		// First, determine if the peering should be active for this
 		// node.
 		shouldRun := false
-		for _, ns := range p.cfg.NodeSelectors {
+		for _, ns := range p.Cfg.NodeSelectors {
 			if ns.Matches(c.nodeLabels) {
 				shouldRun = true
 				break
@@ -260,27 +262,27 @@ func (c *bgpController) syncBGPSessions(l log.Logger, peers []*peer) (needUpdate
 		}
 
 		// Now, compare current state to intended state, and correct.
-		if p.bgp != nil && !shouldRun {
+		if p.BGP != nil && !shouldRun {
 			// Oops, session is running but shouldn't be. Shut it down.
-			l.Log("event", "peerRemoved", "peer", p.cfg.Addr, "reason", "filteredByNodeSelector", "msg", "peer deconfigured, closing BGP session")
-			if err := p.bgp.Close(); err != nil {
-				l.Log("op", "syncBGPSessions", "error", err, "peer", p.cfg.Addr, "msg", "failed to shut down BGP session")
+			l.Log("event", "peerRemoved", "peer", p.Cfg.Addr, "reason", "filteredByNodeSelector", "msg", "peer deconfigured, closing BGP session")
+			if err := p.BGP.Close(); err != nil {
+				l.Log("op", "syncBGPSessions", "error", err, "peer", p.Cfg.Addr, "msg", "failed to shut down BGP session")
 			}
-			p.bgp = nil
-		} else if p.bgp == nil && shouldRun {
+			p.BGP = nil
+		} else if p.BGP == nil && shouldRun {
 			// Session doesn't exist, but should be running. Create
 			// it.
-			l.Log("event", "peerAdded", "peer", p.cfg.Addr, "msg", "peer configured, starting BGP session")
+			l.Log("event", "peerAdded", "peer", p.Cfg.Addr, "msg", "peer configured, starting BGP session")
 			var routerID net.IP
-			if p.cfg.RouterID != nil {
-				routerID = p.cfg.RouterID
+			if p.Cfg.RouterID != nil {
+				routerID = p.Cfg.RouterID
 			}
-			s, err := newBGP(c.logger, net.JoinHostPort(p.cfg.Addr.String(), strconv.Itoa(int(p.cfg.Port))), p.cfg.MyASN, routerID, p.cfg.ASN, p.cfg.HoldTime, p.cfg.Password, c.myNode)
+			s, err := newBGP(c.logger, net.JoinHostPort(p.Cfg.Addr.String(), strconv.Itoa(int(p.Cfg.Port))), p.Cfg.MyASN, routerID, p.Cfg.ASN, p.Cfg.HoldTime, p.Cfg.Password, c.myNode)
 			if err != nil {
-				l.Log("op", "syncBGPSessions", "error", err, "peer", p.cfg.Addr, "msg", "failed to create BGP session")
+				l.Log("op", "syncBGPSessions", "error", err, "peer", p.Cfg.Addr, "msg", "failed to create BGP session")
 				errs++
 			} else {
-				p.bgp = s
+				p.BGP = s
 				needUpdateAds++
 			}
 		}
@@ -327,10 +329,10 @@ func (c *bgpController) updateAds() error {
 		allAds = append(allAds, ads...)
 	}
 	for _, peer := range c.peers {
-		if peer.bgp == nil {
+		if peer.BGP == nil {
 			continue
 		}
-		if err := peer.bgp.Set(allAds...); err != nil {
+		if err := peer.BGP.Set(allAds...); err != nil {
 			return err
 		}
 	}
@@ -377,6 +379,19 @@ func (c *bgpController) SetNode(l log.Logger, node *v1.Node) error {
 
 	l.Log("event", "nodeChanged", "msg", "Node changed, resyncing BGP peers")
 	return c.syncPeers(l)
+}
+
+func (c *bgpController) StatsHandler() func(w http.ResponseWriter, r *http.Request) {
+	return func(w http.ResponseWriter, r *http.Request) {
+		// TODO: Redact BGP password.
+		res := struct{ Peers []*peer }{Peers: c.peers}
+		j, err := json.MarshalIndent(res, "", "  ")
+		if err != nil {
+			http.Error(w, fmt.Sprintf("Failed to get stats: %s", err), 500)
+			return
+		}
+		fmt.Fprint(w, string(j))
+	}
 }
 
 // discoverNodePeer attempts to construct a BGP peer from information conveyed
@@ -542,7 +557,7 @@ func discoverNodePeer(l log.Logger, pad *config.PeerAutodiscovery, node *v1.Node
 	}
 
 	p := &peer{
-		cfg: &config.Peer{
+		Cfg: &config.Peer{
 			MyASN:         myASN,
 			ASN:           peerASN,
 			Addr:          peerAddr,
@@ -552,7 +567,7 @@ func discoverNodePeer(l log.Logger, pad *config.PeerAutodiscovery, node *v1.Node
 			NodeSelectors: []labels.Selector{ns},
 			Password:      password,
 		},
-		nodePeer: true,
+		NodePeer: true,
 	}
 
 	return p, nil
