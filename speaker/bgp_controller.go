@@ -15,10 +15,12 @@
 package main
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
 	"net"
+	"net/http"
 	"reflect"
 	"sort"
 	"strconv"
@@ -394,6 +396,69 @@ func (c *bgpController) SetNode(l log.Logger, node *v1.Node) error {
 
 	l.Log("event", "nodeChanged", "msg", "node changed, resyncing BGP peers")
 	return c.syncPeers(l)
+}
+
+// statusPeer represents a BGP peer in a format suitable for publishing in a
+// status endpoint.
+type statusPeer struct {
+	MyASN         uint32
+	ASN           uint32
+	Addr          net.IP
+	Port          uint16
+	HoldTime      string
+	RouterID      net.IP
+	NodeSelectors []string
+	Password      string
+}
+
+func (c *bgpController) StatusHandler() func(w http.ResponseWriter, r *http.Request) {
+	return func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+
+		// Copy peers slice. We want to redact BGP passwords without modifying
+		// the actual peers.
+		peers := []statusPeer{}
+
+		for _, p := range c.peers {
+			// Peers can be nil temporarily during reconciliation.
+			if p == nil {
+				continue
+			}
+
+			sp := statusPeer{
+				MyASN:    p.Cfg.MyASN,
+				ASN:      p.Cfg.ASN,
+				Addr:     p.Cfg.Addr,
+				Port:     p.Cfg.Port,
+				HoldTime: p.Cfg.HoldTime.String(),
+				RouterID: p.Cfg.RouterID,
+			}
+
+			for _, ns := range p.Cfg.NodeSelectors {
+				sp.NodeSelectors = append(sp.NodeSelectors, ns.String())
+			}
+
+			// Don't expose BGP passwords over the status endpoint.
+			if p.Cfg.Password != "" {
+				sp.Password = "REDACTED"
+			}
+
+			peers = append(peers, sp)
+		}
+
+		res := struct {
+			Peers []statusPeer
+		}{
+			Peers: peers,
+		}
+
+		j, err := json.MarshalIndent(res, "", "  ")
+		if err != nil {
+			http.Error(w, fmt.Sprintf("Failed to get status: %s", err), 500)
+			return
+		}
+		fmt.Fprint(w, string(j))
+	}
 }
 
 // parseNodePeer attempts to construct a BGP peer from information conveyed
