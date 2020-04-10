@@ -177,6 +177,7 @@ func main() {
 	}
 	go func() {
 		logger.Log("op", "startup", "msg", "starting stats handler")
+		// TODO: Parameterize host and port.
 		err := http.ListenAndServe(":8080", nil)
 		if err != nil {
 			logger.Log("op", "startup", "error", err, "msg", "listening for stats requests")
