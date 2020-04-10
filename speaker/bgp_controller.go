@@ -384,6 +384,7 @@ func (c *bgpController) SetNode(l log.Logger, node *v1.Node) error {
 func (c *bgpController) StatsHandler() func(w http.ResponseWriter, r *http.Request) {
 	return func(w http.ResponseWriter, r *http.Request) {
 		// TODO: Redact BGP password.
+		w.Header().Set("Content-Type", "application/json")
 		res := struct{ Peers []*peer }{Peers: c.peers}
 		j, err := json.MarshalIndent(res, "", "  ")
 		if err != nil {
