@@ -191,20 +191,12 @@ func (c *bgpController) syncPeers(l log.Logger) error {
 // the relevant Node object changes.
 func (c *bgpController) syncNodePeer(l log.Logger, node *v1.Node) {
 	if c.peerAutodiscovery == nil {
+		// TODO: Remove any existing node peer?
 		return
 	}
 
-	var np *peer
-	npIndex := -1
-	for i, p := range c.peers {
-		if p.NodePeer {
-			np = p
-			npIndex = i
-		}
-	}
-	peerExists := np != nil
-
-	p, err := discoverNodePeer(l, c.peerAutodiscovery, node)
+	// Discover (or re-discover) node peer configuration from the Node object.
+	discovered, err := discoverNodePeer(l, c.peerAutodiscovery, node)
 	if err != nil {
 		// Log an error without returning to let the user know why peer
 		// autodiscovery failed for this node. We continue execution
@@ -213,10 +205,37 @@ func (c *bgpController) syncNodePeer(l log.Logger, node *v1.Node) {
 		l.Log("op", "setNode", "node", node.Name, "error", err, "msg", "peer autodiscovery failed")
 	}
 
-	if p == nil {
+	var np *peer
+	npIndex := -1
+	identicalPeerExists := false
+	for i, p := range c.peers {
+		// If current peer is a node peer, mark it as we may have to update or
+		// delete it later.
+		if p.NodePeer {
+			np = p
+			npIndex = i
+			continue
+		}
+
+		// If a node peer was discovered, check if the current peer has an
+		// identical config as the discovered peer.
+		if discovered == nil {
+			continue
+		}
+		if bgpConfigEqual(p, discovered) {
+			// Remember that we have a regular peer with an identical config as
+			// the discovered node peer. This means we shouldn't create a new
+			// node peer (as this would result in a duplicate peer) and we also
+			// have to remove the existing node peer, if any.
+			identicalPeerExists = true
+		}
+	}
+	nodePeerExists := np != nil
+
+	if discovered == nil {
 		// Node has invalid/partial/missing peer config. If a node peer exists
 		// for this node, we need to remove it.
-		if peerExists {
+		if nodePeerExists {
 			l.Log("op", "setNode", "node", node.Name, "msg", "removing outdated node peer")
 			if np.BGP != nil {
 				if err := np.BGP.Close(); err != nil {
@@ -229,22 +248,40 @@ func (c *bgpController) syncNodePeer(l log.Logger, node *v1.Node) {
 		return
 	}
 
-	// Valid peer discovered.
-	if peerExists && !reflect.DeepEqual(np.Cfg, p.Cfg) {
-		// Existing peer has an outdated config. Update it.
-		l.Log("op", "setNode", "node", node.Name, "msg", "removing outdated node peer")
-		if np.BGP != nil {
-			if err := np.BGP.Close(); err != nil {
-				l.Log("op", "setNode", "error", err, "peer", np.Cfg.Addr, "msg", "failed to shut down BGP session")
-			}
+	if identicalPeerExists {
+		// We have a regular peer whose config is identical to the discovered
+		// node peer config.
+		if nodePeerExists {
+			l.Log("op", "setNode", "node", node.Name, "msg", "node peer is identical to another peer - removing node peer")
+			// TODO: Create a deletePeer function.
+			peers := append(c.peers[:npIndex], c.peers[npIndex+1:]...)
+			c.peers = peers
 		}
-		c.peers[npIndex] = p
+
+		// Not creating a new node peer as this would duplicate an existing
+		// regular peer.
+		return
+	}
+
+	if nodePeerExists {
+		if !reflect.DeepEqual(np.Cfg, discovered.Cfg) {
+			// The discovered node peer differs from the existing node peer.
+
+			// Existing peer has an outdated config. Update it.
+			l.Log("op", "setNode", "node", node.Name, "msg", "updating node peer config")
+			if np.BGP != nil {
+				if err := np.BGP.Close(); err != nil {
+					l.Log("op", "setNode", "error", err, "peer", np.Cfg.Addr, "msg", "failed to shut down BGP session")
+				}
+			}
+			c.peers[npIndex] = discovered
+		}
 		return
 	}
 
 	// Peer doesn't exist. Create it.
 	l.Log("op", "setNode", "node", node.Name, "msg", "creating node peer")
-	c.peers = append(c.peers, p)
+	c.peers = append(c.peers, discovered)
 
 	return
 }
@@ -572,6 +609,29 @@ func discoverNodePeer(l log.Logger, pad *config.PeerAutodiscovery, node *v1.Node
 	}
 
 	return p, nil
+}
+
+func bgpConfigEqual(a *peer, b *peer) bool {
+	if a.Cfg.ASN != b.Cfg.ASN {
+		return false
+	}
+	if !a.Cfg.Addr.Equal(b.Cfg.Addr) {
+		return false
+	}
+	if a.Cfg.MyASN != b.Cfg.MyASN {
+		return false
+	}
+	if a.Cfg.Port != b.Cfg.Port {
+		return false
+	}
+	if a.Cfg.HoldTime != b.Cfg.HoldTime {
+		return false
+	}
+	if !a.Cfg.RouterID.Equal(b.Cfg.RouterID) {
+		return false
+	}
+
+	return true
 }
 
 func parseHoldTime(ht string) (time.Duration, error) {
