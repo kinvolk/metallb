@@ -420,9 +420,18 @@ func (c *bgpController) SetNode(l log.Logger, node *v1.Node) error {
 
 func (c *bgpController) StatsHandler() func(w http.ResponseWriter, r *http.Request) {
 	return func(w http.ResponseWriter, r *http.Request) {
-		// TODO: Redact BGP password.
 		w.Header().Set("Content-Type", "application/json")
-		res := struct{ Peers []*peer }{Peers: c.peers}
+
+		// Copy peers slice. We want to redact BGP passwords without modifying
+		// the actual peers.
+		peers := []peer{}
+		for _, p := range c.peers {
+			cp := *p
+			cp.Cfg.Password = "REDACTED"
+			peers = append(peers, cp)
+		}
+		res := struct{ Peers []peer }{Peers: peers}
+
 		j, err := json.MarshalIndent(res, "", "  ")
 		if err != nil {
 			http.Error(w, fmt.Sprintf("Failed to get stats: %s", err), 500)
