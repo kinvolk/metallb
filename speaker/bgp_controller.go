@@ -158,7 +158,7 @@ func (c *bgpController) ShouldAnnounce(l log.Logger, name string, svc *v1.Servic
 	return ""
 }
 
-// Called when either the peer list or node labels have changed,
+// Called when either the peer list or node annotations/labels have changed,
 // implying that the set of running BGP sessions may need tweaking.
 func (c *bgpController) syncPeers(l log.Logger) error {
 	var totalErrs int
