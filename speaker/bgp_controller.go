@@ -242,8 +242,7 @@ func (c *bgpController) syncNodePeer(l log.Logger, node *v1.Node) {
 					l.Log("op", "setNode", "error", err, "peer", np.Cfg.Addr, "msg", "failed to shut down BGP session")
 				}
 			}
-			peers := append(c.peers[:npIndex], c.peers[npIndex+1:]...)
-			c.peers = peers
+			c.deletePeer(l, npIndex)
 		}
 		return
 	}
@@ -253,9 +252,7 @@ func (c *bgpController) syncNodePeer(l log.Logger, node *v1.Node) {
 		// node peer config.
 		if nodePeerExists {
 			l.Log("op", "setNode", "node", node.Name, "msg", "node peer is identical to another peer - removing node peer")
-			// TODO: Create a deletePeer function.
-			peers := append(c.peers[:npIndex], c.peers[npIndex+1:]...)
-			c.peers = peers
+			c.deletePeer(l, npIndex)
 		}
 
 		// Not creating a new node peer as this would duplicate an existing
@@ -439,6 +436,17 @@ func (c *bgpController) StatsHandler() func(w http.ResponseWriter, r *http.Reque
 		}
 		fmt.Fprint(w, string(j))
 	}
+}
+
+// Removes the peer at index i from the peer list.
+func (c *bgpController) deletePeer(l log.Logger, i int) {
+	if i >= len(c.peers) {
+		l.Log("op", "deletePeer", "msg", fmt.Sprintf("Index %d is out of bound", i))
+		return
+	}
+
+	peers := append(c.peers[:i], c.peers[i+1:]...)
+	c.peers = peers
 }
 
 // discoverNodePeer attempts to construct a BGP peer from information conveyed
