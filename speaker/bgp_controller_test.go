@@ -4,7 +4,6 @@ import (
 	"errors"
 	"fmt"
 	"net"
-	"reflect"
 	"sort"
 	"sync"
 	"testing"
@@ -1373,7 +1372,7 @@ func TestDiscoverNodePeer(t *testing.T) {
 		// TODO: Use a better comparer. This should allow viewing a per-line diff
 		// rather than a diff of the entire struct.
 		if test.wantPeer != nil {
-			if diff := cmp.Diff(test.wantPeer, gotPeer, cmp.Comparer(peersEqual)); diff != "" {
+			if diff := cmp.Diff(test.wantPeer, gotPeer, cmp.Comparer(bgpConfigEqual)); diff != "" {
 				t.Errorf("%q: Unexpected peer (-want +got)\n%s", test.desc, diff)
 			}
 		}
@@ -1598,12 +1597,8 @@ func TestSyncNodePeer(t *testing.T) {
 		c.peers = test.initialPeers
 
 		c.syncNodePeer(l, test.node)
-		if diff := cmp.Diff(test.wantPeers, c.peers, cmp.Comparer(peersEqual)); diff != "" {
+		if diff := cmp.Diff(test.wantPeers, c.peers, cmp.Comparer(bgpConfigEqual)); diff != "" {
 			t.Errorf("%q: Unexpected peers (-want +got)\n%s", test.desc, diff)
 		}
 	}
-}
-
-func peersEqual(x, y *peer) bool {
-	return reflect.DeepEqual(x, y)
 }

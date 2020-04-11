@@ -222,7 +222,7 @@ func (c *bgpController) syncNodePeer(l log.Logger, node *v1.Node) {
 		if discovered == nil {
 			continue
 		}
-		if bgpConfigEqual(p, discovered) {
+		if bgpConfigEqual(p.Cfg, discovered.Cfg) {
 			// Remember that we have a regular peer with an identical config as
 			// the discovered node peer. This means we shouldn't create a new
 			// node peer (as this would result in a duplicate peer) and we also
@@ -611,23 +611,36 @@ func discoverNodePeer(l log.Logger, pad *config.PeerAutodiscovery, node *v1.Node
 	return p, nil
 }
 
-func bgpConfigEqual(a *peer, b *peer) bool {
-	if a.Cfg.ASN != b.Cfg.ASN {
+// Returns true if the BGP config of a and b is identical.
+//
+// This function compares only BGP configuration - it ignores node selectors,
+// BGP session status and the NodePeer field. It is helpful in cases where we
+// need to check whether two peers are semantically identical with regards to
+// BGP even if they differ in node selectors or if one peer is a node peer and
+// the other isn't.
+//
+// The following parameters are compared: local ASN, peer ASN, peer address,
+// peer port, hold time, router ID. BGP passwords are NOT checked.
+//
+// TODO: When adding BGP password support to node peers, add a check for
+// passwords as well.
+func bgpConfigEqual(a *config.Peer, b *config.Peer) bool {
+	if a.ASN != b.ASN {
 		return false
 	}
-	if !a.Cfg.Addr.Equal(b.Cfg.Addr) {
+	if !a.Addr.Equal(b.Addr) {
 		return false
 	}
-	if a.Cfg.MyASN != b.Cfg.MyASN {
+	if a.MyASN != b.MyASN {
 		return false
 	}
-	if a.Cfg.Port != b.Cfg.Port {
+	if a.Port != b.Port {
 		return false
 	}
-	if a.Cfg.HoldTime != b.Cfg.HoldTime {
+	if a.HoldTime != b.HoldTime {
 		return false
 	}
-	if !a.Cfg.RouterID.Equal(b.Cfg.RouterID) {
+	if !a.RouterID.Equal(b.RouterID) {
 		return false
 	}
 
