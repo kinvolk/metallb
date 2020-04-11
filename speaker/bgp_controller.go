@@ -264,7 +264,7 @@ func (c *bgpController) syncNodePeer(l log.Logger, node *v1.Node) {
 		if !reflect.DeepEqual(np.Cfg, discovered.Cfg) {
 			// The discovered node peer differs from the existing node peer.
 
-			// Existing peer has an outdated config. Update it.
+			// Node peer has an outdated config. Update it.
 			l.Log("op", "setNode", "node", node.Name, "msg", "updating node peer config")
 			if np.BGP != nil {
 				if err := np.BGP.Close(); err != nil {
@@ -273,14 +273,14 @@ func (c *bgpController) syncNodePeer(l log.Logger, node *v1.Node) {
 			}
 			c.peers[npIndex] = discovered
 		}
+
+		// Node peer config is up to date. Nothing to do.
 		return
 	}
 
 	// Peer doesn't exist. Create it.
 	l.Log("op", "setNode", "node", node.Name, "msg", "creating node peer")
 	c.peers = append(c.peers, discovered)
-
-	return
 }
 
 func (c *bgpController) syncBGPSessions(l log.Logger, peers []*peer) (needUpdateAds int, errs int) {
