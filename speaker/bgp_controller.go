@@ -60,6 +60,20 @@ newPeers:
 			if ep == nil {
 				continue
 			}
+			if ep.NodePeer {
+				if reflect.DeepEqual(p, ep.Cfg) {
+					// Node peer is identical to current peer. Replace the node
+					// peer with a new regular peer.
+					newPeers = append(newPeers, &peer{Cfg: ep.Cfg, BGP: ep.BGP})
+					c.peers[i] = nil
+					continue newPeers
+				}
+				// Node peer differs from current peer. Keep the node peer and
+				// continue iterating over the existing peers.
+				newPeers = append(newPeers, ep)
+				c.peers[i] = nil
+				continue
+			}
 			if reflect.DeepEqual(p, ep.Cfg) {
 				newPeers = append(newPeers, ep)
 				c.peers[i] = nil

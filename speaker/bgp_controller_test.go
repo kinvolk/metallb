@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"net"
+	"reflect"
 	"sort"
 	"sync"
 	"testing"
@@ -1599,6 +1600,101 @@ func TestSyncNodePeer(t *testing.T) {
 		c.syncNodePeer(l, test.node)
 		if diff := cmp.Diff(test.wantPeers, c.peers, cmp.Comparer(bgpConfigEqual)); diff != "" {
 			t.Errorf("%q: Unexpected peers (-want +got)\n%s", test.desc, diff)
+		}
+	}
+}
+
+// Verify correct interaction between regular peers and node peers.
+func TestNodePeers(t *testing.T) {
+	l := log.NewNopLogger()
+	c := &bgpController{
+		logger: l,
+		myNode: "pandora",
+		svcAds: make(map[string][]*bgp.Advertisement),
+	}
+
+	p1 := &config.Peer{
+		MyASN:         100,
+		ASN:           200,
+		Addr:          net.ParseIP("10.0.0.1"),
+		Port:          179,
+		HoldTime:      90 * time.Second,
+		NodeSelectors: []labels.Selector{labels.Everything()},
+	}
+	p2 := &config.Peer{
+		MyASN:         100,
+		ASN:           200,
+		Addr:          net.ParseIP("10.0.0.2"),
+		Port:          179,
+		HoldTime:      90 * time.Second,
+		NodeSelectors: []labels.Selector{labels.Everything()},
+	}
+	p3 := &config.Peer{
+		MyASN:         100,
+		ASN:           200,
+		Addr:          net.ParseIP("10.0.0.3"),
+		Port:          179,
+		HoldTime:      90 * time.Second,
+		NodeSelectors: []labels.Selector{labels.Everything()},
+	}
+
+	tests := []struct {
+		desc         string
+		initialPeers []*peer
+		cfg          *config.Config
+		wantPeers    []*peer
+	}{
+		{
+			desc: "Regular peer modified, node peer remains intact",
+			initialPeers: []*peer{
+				&peer{Cfg: p1},
+				&peer{Cfg: p2, NodePeer: true},
+			},
+			cfg: &config.Config{
+				Peers: []*config.Peer{p3},
+			},
+			wantPeers: []*peer{
+				&peer{Cfg: p2, NodePeer: true},
+				&peer{Cfg: p3},
+			},
+		},
+		{
+			desc: "Regular peer modified to be identical to node peer",
+			initialPeers: []*peer{
+				&peer{Cfg: p1},
+				&peer{Cfg: p2, NodePeer: true},
+			},
+			cfg: &config.Config{
+				Peers: []*config.Peer{p2},
+			},
+			wantPeers: []*peer{
+				&peer{Cfg: p2},
+			},
+		},
+	}
+
+	comparer := func(a, b *peer) bool {
+		return reflect.DeepEqual(a.Cfg, b.Cfg)
+	}
+
+	for _, test := range tests {
+		// Reset the BGP session status before each test. The fakeBGP type
+		// preserves BGP session state between tests, which leads to unexpected
+		// results.
+		b := &fakeBGP{
+			t:      t,
+			gotAds: map[string][]*bgp.Advertisement{},
+		}
+		newBGP = b.New
+
+		c.peers = test.initialPeers
+
+		if err := c.SetConfig(l, test.cfg); err != nil {
+			t.Error("SetConfig failed")
+		}
+
+		if diff := cmp.Diff(test.wantPeers, c.peers, cmp.Comparer(comparer)); diff != "" {
+			t.Errorf("Unexpected peers (-want +got)\n%s", diff)
 		}
 	}
 }
