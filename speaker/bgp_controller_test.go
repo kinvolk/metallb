@@ -1109,7 +1109,6 @@ func TestParseNodePeer(t *testing.T) {
 					},
 					RouterID: net.ParseIP("10.0.0.2"),
 				},
-				NodePeer: true,
 			},
 		},
 		{
@@ -1144,7 +1143,6 @@ func TestParseNodePeer(t *testing.T) {
 					},
 					RouterID: net.ParseIP("10.0.0.2"),
 				},
-				NodePeer: true,
 			},
 		},
 		{
@@ -1182,7 +1180,6 @@ func TestParseNodePeer(t *testing.T) {
 					},
 					RouterID: net.ParseIP("10.0.0.2"),
 				},
-				NodePeer: true,
 			},
 		},
 		{
@@ -1219,7 +1216,6 @@ func TestParseNodePeer(t *testing.T) {
 						mustSelector(fmt.Sprintf("%s=%s", v1.LabelHostname, "test")),
 					},
 				},
-				NodePeer: true,
 			},
 		},
 		{
@@ -1289,7 +1285,6 @@ func TestParseNodePeer(t *testing.T) {
 					},
 					RouterID: net.ParseIP("10.0.0.2"),
 				},
-				NodePeer: true,
 			},
 		},
 		{
@@ -1419,89 +1414,66 @@ func TestDiscoverNodePeer(t *testing.T) {
 	}
 
 	tests := []struct {
-		desc         string
-		node         *v1.Node
-		initialPeers []*peer
-		wantPeers    []*peer
+		desc            string
+		node            *v1.Node
+		peers           []*peer
+		initialNodePeer *peer
+		wantNodePeer    *peer
 	}{
 		{
-			desc:         "Empty peer list, node peer discovered",
-			node:         nodeWithBGPAnnotations,
-			initialPeers: []*peer{},
-			wantPeers: []*peer{
-				{
-					Cfg: &config.Peer{
-						MyASN:         100,
-						ASN:           200,
-						Addr:          net.ParseIP("10.0.0.1"),
-						Port:          179,
-						HoldTime:      90 * time.Second,
-						NodeSelectors: []labels.Selector{mustSelector("kubernetes.io/hostname=test")},
-					},
-					NodePeer: true,
+			desc:  "Empty peer list, node peer discovered",
+			node:  nodeWithBGPAnnotations,
+			peers: []*peer{},
+			wantNodePeer: &peer{
+				Cfg: &config.Peer{
+					MyASN:         100,
+					ASN:           200,
+					Addr:          net.ParseIP("10.0.0.1"),
+					Port:          179,
+					HoldTime:      90 * time.Second,
+					NodeSelectors: []labels.Selector{mustSelector("kubernetes.io/hostname=test")},
 				},
 			},
 		},
 		{
-			desc:         "Existing peer, node peer discovered",
-			node:         nodeWithBGPAnnotations,
-			initialPeers: []*peer{p},
-			wantPeers: []*peer{
-				p,
-				{
-					Cfg: &config.Peer{
-						MyASN:         100,
-						ASN:           200,
-						Addr:          net.ParseIP("10.0.0.1"),
-						Port:          179,
-						HoldTime:      90 * time.Second,
-						NodeSelectors: []labels.Selector{mustSelector("kubernetes.io/hostname=test")},
-					},
-					NodePeer: true,
+			desc:  "Existing peer, node peer discovered",
+			node:  nodeWithBGPAnnotations,
+			peers: []*peer{p},
+			wantNodePeer: &peer{
+				Cfg: &config.Peer{
+					MyASN:         100,
+					ASN:           200,
+					Addr:          net.ParseIP("10.0.0.1"),
+					Port:          179,
+					HoldTime:      90 * time.Second,
+					NodeSelectors: []labels.Selector{mustSelector("kubernetes.io/hostname=test")},
 				},
 			},
 		},
 		{
-			desc:         "Existing peer, no node peer discovered",
-			node:         nodeWithoutBGPAnnotations,
-			initialPeers: []*peer{p},
-			wantPeers:    []*peer{p},
+			desc:  "Existing peer, no node peer discovered",
+			node:  nodeWithoutBGPAnnotations,
+			peers: []*peer{p},
 		},
 		{
 			desc: "Existing node peer removed",
 			node: nodeWithoutBGPAnnotations,
-			initialPeers: []*peer{
-				p,
-				{
-					Cfg: &config.Peer{
-						MyASN:         100,
-						ASN:           200,
-						Addr:          net.ParseIP("10.0.0.1"),
-						Port:          179,
-						HoldTime:      90 * time.Second,
-						NodeSelectors: []labels.Selector{mustSelector("kubernetes.io/hostname=test")},
-					},
-					NodePeer: true,
+			initialNodePeer: &peer{
+				Cfg: &config.Peer{
+					MyASN:         100,
+					ASN:           200,
+					Addr:          net.ParseIP("10.0.0.1"),
+					Port:          179,
+					HoldTime:      90 * time.Second,
+					NodeSelectors: []labels.Selector{mustSelector("kubernetes.io/hostname=test")},
 				},
 			},
-			wantPeers: []*peer{p},
+			wantNodePeer: nil,
 		},
 		{
-			desc: "Existing peer, node peer with identical config discovered",
+			desc: "Existing peer, node peer with identical config ignored",
 			node: nodeWithBGPAnnotations,
-			initialPeers: []*peer{
-				{
-					Cfg: &config.Peer{
-						MyASN:         100,
-						ASN:           200,
-						Addr:          net.ParseIP("10.0.0.1"),
-						Port:          179,
-						HoldTime:      90 * time.Second,
-						NodeSelectors: []labels.Selector{mustSelector("kubernetes.io/hostname=test")},
-					},
-				},
-			},
-			wantPeers: []*peer{
+			peers: []*peer{
 				{
 					Cfg: &config.Peer{
 						MyASN:         100,
@@ -1517,7 +1489,7 @@ func TestDiscoverNodePeer(t *testing.T) {
 		{
 			desc: "Node peer changed to match an existing regular peer",
 			node: nodeWithBGPAnnotations,
-			initialPeers: []*peer{
+			peers: []*peer{
 				{
 					Cfg: &config.Peer{
 						MyASN:         100,
@@ -1527,61 +1499,40 @@ func TestDiscoverNodePeer(t *testing.T) {
 						HoldTime:      90 * time.Second,
 						NodeSelectors: []labels.Selector{mustSelector("kubernetes.io/hostname=test")},
 					},
-				},
-				{
-					Cfg: &config.Peer{
-						MyASN:         101,
-						ASN:           202,
-						Addr:          net.ParseIP("10.0.0.3"),
-						Port:          179,
-						HoldTime:      90 * time.Second,
-						NodeSelectors: []labels.Selector{mustSelector("kubernetes.io/hostname=test")},
-					},
-					NodePeer: true,
 				},
 			},
-			wantPeers: []*peer{
-				{
-					Cfg: &config.Peer{
-						MyASN:         100,
-						ASN:           200,
-						Addr:          net.ParseIP("10.0.0.1"),
-						Port:          179,
-						HoldTime:      90 * time.Second,
-						NodeSelectors: []labels.Selector{mustSelector("kubernetes.io/hostname=test")},
-					},
+			initialNodePeer: &peer{
+				Cfg: &config.Peer{
+					MyASN:         101,
+					ASN:           202,
+					Addr:          net.ParseIP("10.0.0.3"),
+					Port:          179,
+					HoldTime:      90 * time.Second,
+					NodeSelectors: []labels.Selector{mustSelector("kubernetes.io/hostname=test")},
 				},
 			},
 		},
 		{
 			desc: "Node peer is up to date",
 			node: nodeWithBGPAnnotations,
-			initialPeers: []*peer{
-				p,
-				{
-					Cfg: &config.Peer{
-						MyASN:         100,
-						ASN:           200,
-						Addr:          net.ParseIP("10.0.0.1"),
-						Port:          179,
-						HoldTime:      90 * time.Second,
-						NodeSelectors: []labels.Selector{mustSelector("kubernetes.io/hostname=test")},
-					},
-					NodePeer: true,
+			initialNodePeer: &peer{
+				Cfg: &config.Peer{
+					MyASN:         100,
+					ASN:           200,
+					Addr:          net.ParseIP("10.0.0.1"),
+					Port:          179,
+					HoldTime:      90 * time.Second,
+					NodeSelectors: []labels.Selector{mustSelector("kubernetes.io/hostname=test")},
 				},
 			},
-			wantPeers: []*peer{
-				p,
-				{
-					Cfg: &config.Peer{
-						MyASN:         100,
-						ASN:           200,
-						Addr:          net.ParseIP("10.0.0.1"),
-						Port:          179,
-						HoldTime:      90 * time.Second,
-						NodeSelectors: []labels.Selector{mustSelector("kubernetes.io/hostname=test")},
-					},
-					NodePeer: true,
+			wantNodePeer: &peer{
+				Cfg: &config.Peer{
+					MyASN:         100,
+					ASN:           200,
+					Addr:          net.ParseIP("10.0.0.1"),
+					Port:          179,
+					HoldTime:      90 * time.Second,
+					NodeSelectors: []labels.Selector{mustSelector("kubernetes.io/hostname=test")},
 				},
 			},
 		},
@@ -1595,10 +1546,10 @@ func TestDiscoverNodePeer(t *testing.T) {
 			svcAds:            make(map[string][]*bgp.Advertisement),
 			peerAutodiscovery: pad,
 		}
-		c.peers = test.initialPeers
+		c.peers = test.peers
 
 		c.discoverNodePeer(l, test.node)
-		if diff := cmp.Diff(test.wantPeers, c.peers, cmp.Comparer(bgpConfigEqual)); diff != "" {
+		if diff := cmp.Diff(test.wantNodePeer, c.nodePeer, cmp.Comparer(bgpConfigEqual)); diff != "" {
 			t.Errorf("%q: Unexpected peers (-want +got)\n%s", test.desc, diff)
 		}
 	}
@@ -1639,31 +1590,33 @@ func TestNodePeers(t *testing.T) {
 	}
 
 	tests := []struct {
-		desc         string
-		initialPeers []*peer
-		cfg          *config.Config
-		wantPeers    []*peer
+		desc            string
+		initialPeers    []*peer
+		initialNodePeer *peer
+		cfg             *config.Config
+		wantPeers       []*peer
+		wantNodePeer    *peer
 	}{
 		{
 			desc: "Regular peer modified, node peer remains intact",
 			initialPeers: []*peer{
 				{Cfg: p1},
-				{Cfg: p2, NodePeer: true},
 			},
+			initialNodePeer: &peer{Cfg: p2},
 			cfg: &config.Config{
 				Peers: []*config.Peer{p3},
 			},
 			wantPeers: []*peer{
-				{Cfg: p2, NodePeer: true},
 				{Cfg: p3},
 			},
+			wantNodePeer: &peer{Cfg: p2},
 		},
 		{
 			desc: "Regular peer modified to be identical to node peer",
 			initialPeers: []*peer{
 				{Cfg: p1},
-				{Cfg: p2, NodePeer: true},
 			},
+			initialNodePeer: &peer{Cfg: p2},
 			cfg: &config.Config{
 				Peers: []*config.Peer{p2},
 			},
@@ -1672,20 +1625,15 @@ func TestNodePeers(t *testing.T) {
 			},
 		},
 		{
-			desc: "No peers in config, node peer remains intact",
-			initialPeers: []*peer{
-				{Cfg: p1, NodePeer: true},
-			},
-			cfg: &config.Config{},
-			wantPeers: []*peer{
-				{Cfg: p1, NodePeer: true},
-			},
+			desc:            "No peers in config, node peer remains intact",
+			initialNodePeer: &peer{Cfg: p1},
+			cfg:             &config.Config{},
+			wantPeers:       []*peer{},
+			wantNodePeer:    &peer{Cfg: p1},
 		},
 		{
-			desc: "Regular peer identical to node peer except node selector",
-			initialPeers: []*peer{
-				{Cfg: p1, NodePeer: true},
-			},
+			desc:            "Regular peer identical to node peer except node selector",
+			initialNodePeer: &peer{Cfg: p1},
 			cfg: &config.Config{
 				Peers: []*config.Peer{
 					{
@@ -1695,15 +1643,28 @@ func TestNodePeers(t *testing.T) {
 						Port:          179,
 						HoldTime:      90 * time.Second,
 						NodeSelectors: []labels.Selector{mustSelector("foo=bar")},
-					}},
+					},
+				},
 			},
 			wantPeers: []*peer{
-				{Cfg: p1},
+				{
+					Cfg: &config.Peer{
+						MyASN:         100,
+						ASN:           200,
+						Addr:          net.ParseIP("10.0.0.1"),
+						Port:          179,
+						HoldTime:      90 * time.Second,
+						NodeSelectors: []labels.Selector{mustSelector("foo=bar")},
+					},
+				},
 			},
 		},
 	}
 
 	comparer := func(a, b *peer) bool {
+		if a == nil || b == nil {
+			return a == b
+		}
 		return reflect.DeepEqual(a.Cfg, b.Cfg)
 	}
 
@@ -1718,13 +1679,17 @@ func TestNodePeers(t *testing.T) {
 		newBGP = b.New
 
 		c.peers = test.initialPeers
+		c.nodePeer = test.initialNodePeer
 
 		if err := c.SetConfig(l, test.cfg); err != nil {
 			t.Error("SetConfig failed")
 		}
 
 		if diff := cmp.Diff(test.wantPeers, c.peers, cmp.Comparer(comparer)); diff != "" {
-			t.Errorf("Unexpected peers (-want +got)\n%s", diff)
+			t.Errorf("%q: Unexpected peers (-want +got)\n%s", test.desc, diff)
+		}
+		if diff := cmp.Diff(test.wantNodePeer, c.nodePeer, cmp.Comparer(comparer)); diff != "" {
+			t.Errorf("%q: Unexpected node peer (-want +got)\n%s", test.desc, diff)
 		}
 	}
 }
