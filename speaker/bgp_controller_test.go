@@ -1058,7 +1058,7 @@ func TestNodeSelectors(t *testing.T) {
 	}
 }
 
-func TestDiscoverNodePeer(t *testing.T) {
+func TestParseNodePeer(t *testing.T) {
 	pam := &config.PeerAutodiscoveryMapping{
 		MyASN:    "example.com/my-asn",
 		ASN:      "example.com/asn",
@@ -1357,7 +1357,7 @@ func TestDiscoverNodePeer(t *testing.T) {
 
 	l := log.NewNopLogger()
 	for _, test := range tests {
-		gotPeer, err := discoverNodePeer(l, test.pad, test.node)
+		gotPeer, err := parseNodePeer(l, test.pad, test.node)
 		if test.wantErr {
 			// We expected an error but didn't get one.
 			if err == nil {
@@ -1380,7 +1380,7 @@ func TestDiscoverNodePeer(t *testing.T) {
 	}
 }
 
-func TestSyncNodePeer(t *testing.T) {
+func TestDiscoverNodePeer(t *testing.T) {
 	nodeWithBGPAnnotations := &v1.Node{
 		ObjectMeta: metav1.ObjectMeta{
 			Labels: map[string]string{
@@ -1597,7 +1597,7 @@ func TestSyncNodePeer(t *testing.T) {
 		}
 		c.peers = test.initialPeers
 
-		c.syncNodePeer(l, test.node)
+		c.discoverNodePeer(l, test.node)
 		if diff := cmp.Diff(test.wantPeers, c.peers, cmp.Comparer(bgpConfigEqual)); diff != "" {
 			t.Errorf("%q: Unexpected peers (-want +got)\n%s", test.desc, diff)
 		}
