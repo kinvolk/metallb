@@ -1429,7 +1429,7 @@ func TestDiscoverNodePeer(t *testing.T) {
 			node:         nodeWithBGPAnnotations,
 			initialPeers: []*peer{},
 			wantPeers: []*peer{
-				&peer{
+				{
 					Cfg: &config.Peer{
 						MyASN:         100,
 						ASN:           200,
@@ -1448,7 +1448,7 @@ func TestDiscoverNodePeer(t *testing.T) {
 			initialPeers: []*peer{p},
 			wantPeers: []*peer{
 				p,
-				&peer{
+				{
 					Cfg: &config.Peer{
 						MyASN:         100,
 						ASN:           200,
@@ -1472,7 +1472,7 @@ func TestDiscoverNodePeer(t *testing.T) {
 			node: nodeWithoutBGPAnnotations,
 			initialPeers: []*peer{
 				p,
-				&peer{
+				{
 					Cfg: &config.Peer{
 						MyASN:         100,
 						ASN:           200,
@@ -1490,7 +1490,7 @@ func TestDiscoverNodePeer(t *testing.T) {
 			desc: "Existing peer, node peer with identical config discovered",
 			node: nodeWithBGPAnnotations,
 			initialPeers: []*peer{
-				&peer{
+				{
 					Cfg: &config.Peer{
 						MyASN:         100,
 						ASN:           200,
@@ -1502,7 +1502,7 @@ func TestDiscoverNodePeer(t *testing.T) {
 				},
 			},
 			wantPeers: []*peer{
-				&peer{
+				{
 					Cfg: &config.Peer{
 						MyASN:         100,
 						ASN:           200,
@@ -1518,7 +1518,7 @@ func TestDiscoverNodePeer(t *testing.T) {
 			desc: "Node peer changed to match an existing regular peer",
 			node: nodeWithBGPAnnotations,
 			initialPeers: []*peer{
-				&peer{
+				{
 					Cfg: &config.Peer{
 						MyASN:         100,
 						ASN:           200,
@@ -1528,7 +1528,7 @@ func TestDiscoverNodePeer(t *testing.T) {
 						NodeSelectors: []labels.Selector{mustSelector("kubernetes.io/hostname=test")},
 					},
 				},
-				&peer{
+				{
 					Cfg: &config.Peer{
 						MyASN:         101,
 						ASN:           202,
@@ -1541,7 +1541,7 @@ func TestDiscoverNodePeer(t *testing.T) {
 				},
 			},
 			wantPeers: []*peer{
-				&peer{
+				{
 					Cfg: &config.Peer{
 						MyASN:         100,
 						ASN:           200,
@@ -1558,7 +1558,7 @@ func TestDiscoverNodePeer(t *testing.T) {
 			node: nodeWithBGPAnnotations,
 			initialPeers: []*peer{
 				p,
-				&peer{
+				{
 					Cfg: &config.Peer{
 						MyASN:         100,
 						ASN:           200,
@@ -1572,7 +1572,7 @@ func TestDiscoverNodePeer(t *testing.T) {
 			},
 			wantPeers: []*peer{
 				p,
-				&peer{
+				{
 					Cfg: &config.Peer{
 						MyASN:         100,
 						ASN:           200,
@@ -1647,48 +1647,48 @@ func TestNodePeers(t *testing.T) {
 		{
 			desc: "Regular peer modified, node peer remains intact",
 			initialPeers: []*peer{
-				&peer{Cfg: p1},
-				&peer{Cfg: p2, NodePeer: true},
+				{Cfg: p1},
+				{Cfg: p2, NodePeer: true},
 			},
 			cfg: &config.Config{
 				Peers: []*config.Peer{p3},
 			},
 			wantPeers: []*peer{
-				&peer{Cfg: p2, NodePeer: true},
-				&peer{Cfg: p3},
+				{Cfg: p2, NodePeer: true},
+				{Cfg: p3},
 			},
 		},
 		{
 			desc: "Regular peer modified to be identical to node peer",
 			initialPeers: []*peer{
-				&peer{Cfg: p1},
-				&peer{Cfg: p2, NodePeer: true},
+				{Cfg: p1},
+				{Cfg: p2, NodePeer: true},
 			},
 			cfg: &config.Config{
 				Peers: []*config.Peer{p2},
 			},
 			wantPeers: []*peer{
-				&peer{Cfg: p2},
+				{Cfg: p2},
 			},
 		},
 		{
 			desc: "No peers in config, node peer remains intact",
 			initialPeers: []*peer{
-				&peer{Cfg: p1, NodePeer: true},
+				{Cfg: p1, NodePeer: true},
 			},
 			cfg: &config.Config{},
 			wantPeers: []*peer{
-				&peer{Cfg: p1, NodePeer: true},
+				{Cfg: p1, NodePeer: true},
 			},
 		},
 		{
 			desc: "Regular peer identical to node peer except node selector",
 			initialPeers: []*peer{
-				&peer{Cfg: p1, NodePeer: true},
+				{Cfg: p1, NodePeer: true},
 			},
 			cfg: &config.Config{
 				Peers: []*config.Peer{
-					&config.Peer{
+					{
 						MyASN:         100,
 						ASN:           200,
 						Addr:          net.ParseIP("10.0.0.1"),
@@ -1698,7 +1698,7 @@ func TestNodePeers(t *testing.T) {
 					}},
 			},
 			wantPeers: []*peer{
-				&peer{Cfg: p1},
+				{Cfg: p1},
 			},
 		},
 	}
