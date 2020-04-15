@@ -228,7 +228,7 @@ func (c *bgpController) syncNodePeer(l log.Logger, node *v1.Node) {
 		// autodiscovery failed for this node. We continue execution
 		// because we still want to remove any outdated node peer which may
 		// exist.
-		l.Log("op", "setNode", "node", node.Name, "error", err, "msg", "peer autodiscovery failed")
+		l.Log("op", "syncNodePeer", "node", node.Name, "error", err, "msg", "peer autodiscovery failed")
 	}
 
 	var np *peer
@@ -262,10 +262,10 @@ func (c *bgpController) syncNodePeer(l log.Logger, node *v1.Node) {
 		// Node has invalid/partial/missing peer config. If a node peer exists
 		// for this node, we need to remove it.
 		if nodePeerExists {
-			l.Log("op", "setNode", "node", node.Name, "msg", "removing outdated node peer")
+			l.Log("op", "syncNodePeer", "node", node.Name, "msg", "removing outdated node peer")
 			if np.BGP != nil {
 				if err := np.BGP.Close(); err != nil {
-					l.Log("op", "setNode", "error", err, "peer", np.Cfg.Addr, "msg", "failed to shut down BGP session")
+					l.Log("op", "syncNodePeer", "error", err, "peer", np.Cfg.Addr, "msg", "failed to shut down BGP session")
 				}
 			}
 			c.deletePeer(l, npIndex)
@@ -277,7 +277,7 @@ func (c *bgpController) syncNodePeer(l log.Logger, node *v1.Node) {
 		// We have a regular peer whose config is identical to the discovered
 		// node peer config.
 		if nodePeerExists {
-			l.Log("op", "setNode", "node", node.Name, "msg", "node peer is identical to another peer - removing node peer")
+			l.Log("op", "syncNodePeer", "node", node.Name, "msg", "node peer is identical to another peer - removing node peer")
 			c.deletePeer(l, npIndex)
 		}
 
@@ -291,10 +291,10 @@ func (c *bgpController) syncNodePeer(l log.Logger, node *v1.Node) {
 			// The discovered node peer differs from the existing node peer.
 
 			// Node peer has an outdated config. Update it.
-			l.Log("op", "setNode", "node", node.Name, "msg", "updating node peer config")
+			l.Log("op", "syncNodePeer", "node", node.Name, "msg", "updating node peer config")
 			if np.BGP != nil {
 				if err := np.BGP.Close(); err != nil {
-					l.Log("op", "setNode", "error", err, "peer", np.Cfg.Addr, "msg", "failed to shut down BGP session")
+					l.Log("op", "syncNodePeer", "error", err, "peer", np.Cfg.Addr, "msg", "failed to shut down BGP session")
 				}
 			}
 			c.peers[npIndex] = discovered
@@ -305,7 +305,7 @@ func (c *bgpController) syncNodePeer(l log.Logger, node *v1.Node) {
 	}
 
 	// Peer doesn't exist. Create it.
-	l.Log("op", "setNode", "node", node.Name, "msg", "creating node peer")
+	l.Log("op", "syncNodePeer", "node", node.Name, "msg", "creating node peer")
 	c.peers = append(c.peers, discovered)
 }
 
