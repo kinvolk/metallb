@@ -1681,6 +1681,26 @@ func TestNodePeers(t *testing.T) {
 				&peer{Cfg: p1, NodePeer: true},
 			},
 		},
+		{
+			desc: "Regular peer identical to node peer except node selector",
+			initialPeers: []*peer{
+				&peer{Cfg: p1, NodePeer: true},
+			},
+			cfg: &config.Config{
+				Peers: []*config.Peer{
+					&config.Peer{
+						MyASN:         100,
+						ASN:           200,
+						Addr:          net.ParseIP("10.0.0.1"),
+						Port:          179,
+						HoldTime:      90 * time.Second,
+						NodeSelectors: []labels.Selector{mustSelector("foo=bar")},
+					}},
+			},
+			wantPeers: []*peer{
+				&peer{Cfg: p1},
+			},
+		},
 	}
 
 	comparer := func(a, b *peer) bool {

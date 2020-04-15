@@ -73,7 +73,7 @@ newPeers:
 				continue
 			}
 			if ep.NodePeer {
-				if reflect.DeepEqual(p, ep.Cfg) {
+				if bgpConfigEqual(p, ep.Cfg) {
 					// Node peer is identical to current peer. Replace the node
 					// peer with a new regular peer.
 					newPeers = append(newPeers, &peer{Cfg: ep.Cfg, BGP: ep.BGP})
