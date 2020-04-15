@@ -217,6 +217,7 @@ func (c *bgpController) syncPeers(l log.Logger) error {
 // the relevant Node object changes.
 func (c *bgpController) discoverNodePeer(l log.Logger, node *v1.Node) {
 	if c.peerAutodiscovery == nil {
+		l.Log("op", "discoverNodePeer", "node", node.Name, "msg", "peer autodiscovery not configured")
 		// TODO: Remove any existing node peer?
 		return
 	}
