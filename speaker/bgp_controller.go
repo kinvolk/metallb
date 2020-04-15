@@ -53,7 +53,19 @@ type bgpController struct {
 func (c *bgpController) SetConfig(l log.Logger, cfg *config.Config) error {
 	c.peerAutodiscovery = cfg.PeerAutodiscovery
 
-	newPeers := make([]*peer, 0, len(cfg.Peers))
+	newPeers := []*peer{}
+
+	// When no peers are specified in the configuration, we still want to keep
+	// any discovered node peers.
+	if len(cfg.Peers) == 0 {
+		for i, ep := range c.peers {
+			if ep.NodePeer {
+				newPeers = append(newPeers, ep)
+				c.peers[i] = nil
+			}
+		}
+	}
+
 newPeers:
 	for _, p := range cfg.Peers {
 		for i, ep := range c.peers {

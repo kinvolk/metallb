@@ -1671,6 +1671,16 @@ func TestNodePeers(t *testing.T) {
 				&peer{Cfg: p2},
 			},
 		},
+		{
+			desc: "No peers in config, node peer remains intact",
+			initialPeers: []*peer{
+				&peer{Cfg: p1, NodePeer: true},
+			},
+			cfg: &config.Config{},
+			wantPeers: []*peer{
+				&peer{Cfg: p1, NodePeer: true},
+			},
+		},
 	}
 
 	comparer := func(a, b *peer) bool {
