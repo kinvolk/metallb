@@ -441,10 +441,15 @@ func (c *bgpController) StatsHandler() func(w http.ResponseWriter, r *http.Reque
 			peers = append(peers, cp)
 		}
 
-		np := peer{}
-		np.BGP = c.nodePeer.BGP
-		cfgCopy := *c.nodePeer.Cfg
-		np.Cfg = &cfgCopy
+		var np peer
+		if c.nodePeer != nil {
+			np = peer{}
+			np.BGP = c.nodePeer.BGP
+			cfgCopy := *c.nodePeer.Cfg
+			np.Cfg = &cfgCopy
+
+			np.Cfg.Password = "REDACTED"
+		}
 
 		res := struct {
 			Peers    []peer
@@ -453,6 +458,7 @@ func (c *bgpController) StatsHandler() func(w http.ResponseWriter, r *http.Reque
 			Peers:    peers,
 			NodePeer: np,
 		}
+
 		j, err := json.MarshalIndent(res, "", "  ")
 		if err != nil {
 			http.Error(w, fmt.Sprintf("Failed to get stats: %s", err), 500)
