@@ -4,7 +4,6 @@ import (
 	"errors"
 	"fmt"
 	"net"
-	"reflect"
 	"sort"
 	"sync"
 	"testing"
@@ -1069,29 +1068,26 @@ func TestParseNodePeer(t *testing.T) {
 	}
 
 	tests := []struct {
-		desc     string
-		node     *v1.Node
-		pad      *config.PeerAutodiscovery
-		wantErr  bool
-		wantPeer *peer
+		desc        string
+		annotations labels.Set
+		labels      labels.Set
+		pad         *config.PeerAutodiscovery
+		wantErr     bool
+		wantPeer    *peer
 	}{
 		{
 			desc: "Full config in annotations",
-			node: &v1.Node{
-				ObjectMeta: metav1.ObjectMeta{
-					Labels: map[string]string{
-						"kubernetes.io/hostname": "test",
-					},
-					Annotations: map[string]string{
-						"example.com/my-asn":    "65000",
-						"example.com/asn":       "65001",
-						"example.com/addr":      "10.0.0.1",
-						"example.com/port":      "1179",
-						"example.com/hold-time": "30s",
-						"example.com/router-id": "10.0.0.2",
-					},
-				},
-			},
+			annotations: labels.Set(map[string]string{
+				"example.com/my-asn":    "65000",
+				"example.com/asn":       "65001",
+				"example.com/addr":      "10.0.0.1",
+				"example.com/port":      "1179",
+				"example.com/hold-time": "30s",
+				"example.com/router-id": "10.0.0.2",
+			}),
+			labels: labels.Set(map[string]string{
+				"kubernetes.io/hostname": "test",
+			}),
 			pad: &config.PeerAutodiscovery{
 				NodeSelectors:   []labels.Selector{labels.Everything()},
 				FromAnnotations: pam,
@@ -1112,20 +1108,17 @@ func TestParseNodePeer(t *testing.T) {
 			},
 		},
 		{
-			desc: "Full config in labels",
-			node: &v1.Node{
-				ObjectMeta: metav1.ObjectMeta{
-					Labels: map[string]string{
-						"kubernetes.io/hostname": "test",
-						"example.com/my-asn":     "65000",
-						"example.com/asn":        "65001",
-						"example.com/addr":       "10.0.0.1",
-						"example.com/port":       "1179",
-						"example.com/hold-time":  "30s",
-						"example.com/router-id":  "10.0.0.2",
-					},
-				},
-			},
+			desc:        "Full config in labels",
+			annotations: labels.Set(map[string]string{}),
+			labels: labels.Set(map[string]string{
+				"kubernetes.io/hostname": "test",
+				"example.com/my-asn":     "65000",
+				"example.com/asn":        "65001",
+				"example.com/addr":       "10.0.0.1",
+				"example.com/port":       "1179",
+				"example.com/hold-time":  "30s",
+				"example.com/router-id":  "10.0.0.2",
+			}),
 			pad: &config.PeerAutodiscovery{
 				NodeSelectors: []labels.Selector{labels.Everything()},
 				FromLabels:    pam,
@@ -1147,21 +1140,17 @@ func TestParseNodePeer(t *testing.T) {
 		},
 		{
 			desc: "Mixed - config in labels and annotations",
-			node: &v1.Node{
-				ObjectMeta: metav1.ObjectMeta{
-					Annotations: map[string]string{
-						"example.com/my-asn":    "65000",
-						"example.com/addr":      "10.0.0.1",
-						"example.com/hold-time": "30s",
-					},
-					Labels: map[string]string{
-						"kubernetes.io/hostname": "test",
-						"example.com/asn":        "65001",
-						"example.com/port":       "1179",
-						"example.com/router-id":  "10.0.0.2",
-					},
-				},
-			},
+			annotations: labels.Set(map[string]string{
+				"example.com/my-asn":    "65000",
+				"example.com/addr":      "10.0.0.1",
+				"example.com/hold-time": "30s",
+			}),
+			labels: labels.Set(map[string]string{
+				"kubernetes.io/hostname": "test",
+				"example.com/asn":        "65001",
+				"example.com/port":       "1179",
+				"example.com/router-id":  "10.0.0.2",
+			}),
 			pad: &config.PeerAutodiscovery{
 				NodeSelectors:   []labels.Selector{labels.Everything()},
 				FromAnnotations: pam,
@@ -1184,16 +1173,12 @@ func TestParseNodePeer(t *testing.T) {
 		},
 		{
 			desc: "Use all defaults",
-			node: &v1.Node{
-				ObjectMeta: metav1.ObjectMeta{
-					Annotations: map[string]string{
-						"example.com/addr": "10.0.0.1",
-					},
-					Labels: map[string]string{
-						"kubernetes.io/hostname": "test",
-					},
-				},
-			},
+			annotations: labels.Set(map[string]string{
+				"example.com/addr": "10.0.0.1",
+			}),
+			labels: labels.Set(map[string]string{
+				"kubernetes.io/hostname": "test",
+			}),
 			pad: &config.PeerAutodiscovery{
 				Defaults: &config.PeerAutodiscoveryDefaults{
 					ASN:      65001,
@@ -1220,53 +1205,45 @@ func TestParseNodePeer(t *testing.T) {
 		},
 		{
 			desc: "Nil peer autodiscovery",
-			node: &v1.Node{
-				ObjectMeta: metav1.ObjectMeta{
-					Annotations: map[string]string{
-						"example.com/my-asn":    "65000",
-						"example.com/asn":       "65001",
-						"example.com/addr":      "10.0.0.1",
-						"example.com/port":      "1179",
-						"example.com/hold-time": "30s",
-						"example.com/router-id": "10.0.0.2",
-					},
-					Labels: map[string]string{
-						"kubernetes.io/hostname": "test",
-						"example.com/my-asn":     "65000",
-						"example.com/asn":        "65001",
-						"example.com/addr":       "10.0.0.1",
-						"example.com/port":       "1179",
-						"example.com/hold-time":  "30s",
-						"example.com/router-id":  "10.0.0.2",
-					},
-				},
-			},
+			annotations: labels.Set(map[string]string{
+				"example.com/my-asn":    "65000",
+				"example.com/asn":       "65001",
+				"example.com/addr":      "10.0.0.1",
+				"example.com/port":      "1179",
+				"example.com/hold-time": "30s",
+				"example.com/router-id": "10.0.0.2",
+			}),
+			labels: labels.Set(map[string]string{
+				"kubernetes.io/hostname": "test",
+				"example.com/my-asn":     "65000",
+				"example.com/asn":        "65001",
+				"example.com/addr":       "10.0.0.1",
+				"example.com/port":       "1179",
+				"example.com/hold-time":  "30s",
+				"example.com/router-id":  "10.0.0.2",
+			}),
 			wantErr:  true,
 			wantPeer: nil,
 		},
 		{
 			desc: "Verify annotations get precedence over labels",
-			node: &v1.Node{
-				ObjectMeta: metav1.ObjectMeta{
-					Annotations: map[string]string{
-						"example.com/my-asn":    "65000",
-						"example.com/asn":       "65001",
-						"example.com/addr":      "10.0.0.1",
-						"example.com/port":      "1179",
-						"example.com/hold-time": "30s",
-						"example.com/router-id": "10.0.0.2",
-					},
-					Labels: map[string]string{
-						"kubernetes.io/hostname": "test",
-						"example.com/my-asn":     "65002",
-						"example.com/asn":        "65003",
-						"example.com/addr":       "10.0.0.3",
-						"example.com/port":       "2179",
-						"example.com/hold-time":  "120s",
-						"example.com/router-id":  "10.0.0.4",
-					},
-				},
-			},
+			annotations: labels.Set(map[string]string{
+				"example.com/my-asn":    "65000",
+				"example.com/asn":       "65001",
+				"example.com/addr":      "10.0.0.1",
+				"example.com/port":      "1179",
+				"example.com/hold-time": "30s",
+				"example.com/router-id": "10.0.0.2",
+			}),
+			labels: labels.Set(map[string]string{
+				"kubernetes.io/hostname": "test",
+				"example.com/my-asn":     "65002",
+				"example.com/asn":        "65003",
+				"example.com/addr":       "10.0.0.3",
+				"example.com/port":       "2179",
+				"example.com/hold-time":  "120s",
+				"example.com/router-id":  "10.0.0.4",
+			}),
 			pad: &config.PeerAutodiscovery{
 				NodeSelectors:   []labels.Selector{labels.Everything()},
 				FromAnnotations: pam,
@@ -1289,13 +1266,14 @@ func TestParseNodePeer(t *testing.T) {
 		},
 		{
 			desc: "Node labels don't match selector",
-			node: &v1.Node{
-				ObjectMeta: metav1.ObjectMeta{
-					Labels: map[string]string{
-						"kubernetes.io/hostname": "test",
-					},
-				},
-			},
+			annotations: labels.Set(map[string]string{
+				"example.com/my-asn": "100",
+				"example.com/asn":    "200",
+				"example.com/addr":   "10.0.0.1",
+			}),
+			labels: labels.Set(map[string]string{
+				"kubernetes.io/hostname": "test",
+			}),
 			pad: &config.PeerAutodiscovery{
 				NodeSelectors:   []labels.Selector{mustSelector("foo=bar")},
 				FromAnnotations: pam,
@@ -1306,18 +1284,14 @@ func TestParseNodePeer(t *testing.T) {
 		},
 		{
 			desc: "Empty annotations",
-			node: &v1.Node{
-				ObjectMeta: metav1.ObjectMeta{
-					Annotations: map[string]string{
-						"example.com/my-asn": "",
-						"example.com/asn":    "",
-						"example.com/addr":   "",
-					},
-					Labels: map[string]string{
-						"kubernetes.io/hostname": "test",
-					},
-				},
-			},
+			annotations: labels.Set(map[string]string{
+				"example.com/my-asn": "",
+				"example.com/asn":    "",
+				"example.com/addr":   "",
+			}),
+			labels: labels.Set(map[string]string{
+				"kubernetes.io/hostname": "test",
+			}),
 			pad: &config.PeerAutodiscovery{
 				NodeSelectors: []labels.Selector{
 					mustSelector(fmt.Sprintf("%s=%s", v1.LabelHostname, "test")),
@@ -1328,17 +1302,14 @@ func TestParseNodePeer(t *testing.T) {
 			wantPeer: nil,
 		},
 		{
-			desc: "Empty labels",
-			node: &v1.Node{
-				ObjectMeta: metav1.ObjectMeta{
-					Labels: map[string]string{
-						"kubernetes.io/hostname": "test",
-						"example.com/my-asn":     "",
-						"example.com/asn":        "",
-						"example.com/addr":       "",
-					},
-				},
-			},
+			desc:        "Empty labels",
+			annotations: labels.Set(map[string]string{}),
+			labels: labels.Set(map[string]string{
+				"kubernetes.io/hostname": "test",
+				"example.com/my-asn":     "",
+				"example.com/asn":        "",
+				"example.com/addr":       "",
+			}),
 			pad: &config.PeerAutodiscovery{
 				NodeSelectors: []labels.Selector{
 					mustSelector(fmt.Sprintf("%s=%s", v1.LabelHostname, "test")),
@@ -1352,7 +1323,7 @@ func TestParseNodePeer(t *testing.T) {
 
 	l := log.NewNopLogger()
 	for _, test := range tests {
-		gotPeer, err := parseNodePeer(l, test.pad, test.node)
+		gotPeer, err := parseNodePeer(l, test.pad, test.annotations, test.labels)
 		if test.wantErr {
 			// We expected an error but didn't get one.
 			if err == nil {
@@ -1365,35 +1336,20 @@ func TestParseNodePeer(t *testing.T) {
 			// We didn't expect an error.
 			t.Errorf("%q: Expected no error but got %q", test.desc, err.Error())
 		}
-		// TODO: Use a better comparer. This should allow viewing a per-line diff
-		// rather than a diff of the entire struct.
-		if test.wantPeer != nil {
-			if diff := cmp.Diff(test.wantPeer, gotPeer, cmp.Comparer(bgpConfigEqual)); diff != "" {
-				t.Errorf("%q: Unexpected peer (-want +got)\n%s", test.desc, diff)
-			}
+		if diff := cmp.Diff(test.wantPeer, gotPeer, cmp.Comparer(bgpConfigEqual)); diff != "" {
+			t.Errorf("%q: Unexpected peer (-want +got)\n%s", test.desc, diff)
 		}
 	}
 }
 
 func TestDiscoverNodePeer(t *testing.T) {
-	nodeWithBGPAnnotations := &v1.Node{
-		ObjectMeta: metav1.ObjectMeta{
-			Labels: map[string]string{
-				"kubernetes.io/hostname": "test",
-			},
-			Annotations: map[string]string{
-				"example.com/my-asn":       "100",
-				"example.com/peer-asn":     "200",
-				"example.com/peer-address": "10.0.0.1",
-			},
-		},
+	anns := map[string]string{
+		"example.com/my-asn":       "100",
+		"example.com/peer-asn":     "200",
+		"example.com/peer-address": "10.0.0.1",
 	}
-	nodeWithoutBGPAnnotations := &v1.Node{
-		ObjectMeta: metav1.ObjectMeta{
-			Labels: map[string]string{
-				"kubernetes.io/hostname": "test",
-			},
-		},
+	ls := map[string]string{
+		"kubernetes.io/hostname": "test",
 	}
 	pad := &config.PeerAutodiscovery{
 		FromAnnotations: &config.PeerAutodiscoveryMapping{
@@ -1415,15 +1371,17 @@ func TestDiscoverNodePeer(t *testing.T) {
 
 	tests := []struct {
 		desc            string
-		node            *v1.Node
+		annotations     map[string]string
+		labels          map[string]string
 		peers           []*peer
 		initialNodePeer *peer
 		wantNodePeer    *peer
 	}{
 		{
-			desc:  "Empty peer list, node peer discovered",
-			node:  nodeWithBGPAnnotations,
-			peers: []*peer{},
+			desc:        "Empty peer list, node peer discovered",
+			annotations: anns,
+			labels:      ls,
+			peers:       []*peer{},
 			wantNodePeer: &peer{
 				Cfg: &config.Peer{
 					MyASN:         100,
@@ -1436,9 +1394,10 @@ func TestDiscoverNodePeer(t *testing.T) {
 			},
 		},
 		{
-			desc:  "Existing peer, node peer discovered",
-			node:  nodeWithBGPAnnotations,
-			peers: []*peer{p},
+			desc:        "Existing peer, node peer discovered",
+			annotations: anns,
+			labels:      ls,
+			peers:       []*peer{p},
 			wantNodePeer: &peer{
 				Cfg: &config.Peer{
 					MyASN:         100,
@@ -1451,13 +1410,15 @@ func TestDiscoverNodePeer(t *testing.T) {
 			},
 		},
 		{
-			desc:  "Existing peer, no node peer discovered",
-			node:  nodeWithoutBGPAnnotations,
-			peers: []*peer{p},
+			desc:        "Existing peer, no node peer discovered",
+			annotations: map[string]string{},
+			labels:      ls,
+			peers:       []*peer{p},
 		},
 		{
-			desc: "Existing node peer removed",
-			node: nodeWithoutBGPAnnotations,
+			desc:        "Existing node peer removed",
+			annotations: map[string]string{},
+			labels:      ls,
 			initialNodePeer: &peer{
 				Cfg: &config.Peer{
 					MyASN:         100,
@@ -1471,8 +1432,9 @@ func TestDiscoverNodePeer(t *testing.T) {
 			wantNodePeer: nil,
 		},
 		{
-			desc: "Existing peer, node peer with identical config ignored",
-			node: nodeWithBGPAnnotations,
+			desc:        "Existing peer, node peer with identical config ignored",
+			annotations: anns,
+			labels:      ls,
 			peers: []*peer{
 				{
 					Cfg: &config.Peer{
@@ -1487,8 +1449,9 @@ func TestDiscoverNodePeer(t *testing.T) {
 			},
 		},
 		{
-			desc: "Node peer changed to match an existing regular peer",
-			node: nodeWithBGPAnnotations,
+			desc:        "Node peer changed to match an existing regular peer",
+			annotations: anns,
+			labels:      ls,
 			peers: []*peer{
 				{
 					Cfg: &config.Peer{
@@ -1513,8 +1476,9 @@ func TestDiscoverNodePeer(t *testing.T) {
 			},
 		},
 		{
-			desc: "Node peer is up to date",
-			node: nodeWithBGPAnnotations,
+			desc:        "Node peer is up to date",
+			annotations: anns,
+			labels:      ls,
 			initialNodePeer: &peer{
 				Cfg: &config.Peer{
 					MyASN:         100,
@@ -1545,10 +1509,12 @@ func TestDiscoverNodePeer(t *testing.T) {
 			myNode:            "pandora",
 			svcAds:            make(map[string][]*bgp.Advertisement),
 			peerAutodiscovery: pad,
+			nodeAnnotations:   labels.Set(test.annotations),
+			nodeLabels:        labels.Set(test.labels),
 		}
 		c.peers = test.peers
 
-		c.discoverNodePeer(l, test.node)
+		c.discoverNodePeer(l)
 		if diff := cmp.Diff(test.wantNodePeer, c.nodePeer, cmp.Comparer(bgpConfigEqual)); diff != "" {
 			t.Errorf("%q: Unexpected peers (-want +got)\n%s", test.desc, diff)
 		}
@@ -1557,13 +1523,6 @@ func TestDiscoverNodePeer(t *testing.T) {
 
 // Verify correct interaction between regular peers and node peers.
 func TestNodePeers(t *testing.T) {
-	l := log.NewNopLogger()
-	c := &bgpController{
-		logger: l,
-		myNode: "pandora",
-		svcAds: make(map[string][]*bgp.Advertisement),
-	}
-
 	p1 := &config.Peer{
 		MyASN:         100,
 		ASN:           200,
@@ -1659,13 +1618,43 @@ func TestNodePeers(t *testing.T) {
 				},
 			},
 		},
+		{
+			desc: "Peer autodiscovery enabled",
+			cfg: &config.Config{
+				PeerAutodiscovery: &config.PeerAutodiscovery{
+					FromAnnotations: &config.PeerAutodiscoveryMapping{
+						MyASN: "example.com/my-asn",
+						ASN:   "example.com/asn",
+						Addr:  "example.com/addr",
+					},
+					NodeSelectors: []labels.Selector{labels.Everything()},
+				},
+			},
+			wantPeers:    []*peer{},
+			wantNodePeer: &peer{Cfg: p1},
+		},
 	}
 
 	comparer := func(a, b *peer) bool {
 		if a == nil || b == nil {
 			return a == b
 		}
-		return reflect.DeepEqual(a.Cfg, b.Cfg)
+		return bgpConfigEqual(a.Cfg, b.Cfg)
+	}
+
+	l := log.NewNopLogger()
+	c := &bgpController{
+		logger: l,
+		myNode: "pandora",
+		svcAds: make(map[string][]*bgp.Advertisement),
+		nodeAnnotations: labels.Set(map[string]string{
+			"example.com/my-asn": "100",
+			"example.com/asn":    "200",
+			"example.com/addr":   "10.0.0.1",
+		}),
+		nodeLabels: labels.Set(map[string]string{
+			"kubernetes.io/hostname": "test",
+		}),
 	}
 
 	for _, test := range tests {

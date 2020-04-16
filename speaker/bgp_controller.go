@@ -53,6 +53,8 @@ type bgpController struct {
 func (c *bgpController) SetConfig(l log.Logger, cfg *config.Config) error {
 	c.peerAutodiscovery = cfg.PeerAutodiscovery
 
+	c.discoverNodePeer(l)
+
 	newPeers := make([]*peer, 0, len(cfg.Peers))
 newPeers:
 	for _, p := range cfg.Peers {
@@ -198,25 +200,21 @@ func (c *bgpController) syncPeers(l log.Logger) error {
 
 // Attempt to create a BGP peer from node annotations and/or labels if peer
 // autodiscovery is configured.
-//
-// TODO: This method is called only on changes to Node objects. This means that
-// when peer autodiscovery config is changed, node peers won't be synced until
-// the relevant Node object changes.
-func (c *bgpController) discoverNodePeer(l log.Logger, node *v1.Node) {
+func (c *bgpController) discoverNodePeer(l log.Logger) {
 	if c.peerAutodiscovery == nil {
-		l.Log("op", "discoverNodePeer", "node", node.Name, "msg", "peer autodiscovery not configured")
+		l.Log("op", "discoverNodePeer", "msg", "peer autodiscovery not configured")
 		// TODO: Remove any existing node peer?
 		return
 	}
 
 	// Parse (or re-parse) node peer configuration from the Node object.
-	discovered, err := parseNodePeer(l, c.peerAutodiscovery, node)
+	discovered, err := parseNodePeer(l, c.peerAutodiscovery, c.nodeAnnotations, c.nodeLabels)
 	if err != nil {
 		// Log an error without returning to let the user know why peer
 		// autodiscovery failed for this node. We continue execution
 		// because we still want to remove any outdated node peer which may
 		// exist.
-		l.Log("op", "discoverNodePeer", "node", node.Name, "error", err, "msg", "peer autodiscovery failed")
+		l.Log("op", "discoverNodePeer", "error", err, "msg", "peer autodiscovery failed")
 	}
 	nodePeerExists := c.nodePeer != nil
 
@@ -224,7 +222,7 @@ func (c *bgpController) discoverNodePeer(l log.Logger, node *v1.Node) {
 		// Node has invalid/partial/missing peer config. If a node peer exists
 		// for this node, we need to remove it.
 		if nodePeerExists {
-			l.Log("op", "discoverNodePeer", "node", node.Name, "msg", "removing outdated node peer")
+			l.Log("op", "discoverNodePeer", "msg", "removing outdated node peer")
 			c.deleteNodePeer(l)
 		}
 		return
@@ -243,7 +241,7 @@ func (c *bgpController) discoverNodePeer(l log.Logger, node *v1.Node) {
 		// We have a regular peer whose config is identical to the discovered
 		// node peer config.
 		if nodePeerExists {
-			l.Log("op", "discoverNodePeer", "node", node.Name, "msg", "node peer is identical to another peer - removing node peer")
+			l.Log("op", "discoverNodePeer", "msg", "node peer is identical to another peer - removing node peer")
 			c.deleteNodePeer(l)
 		}
 		// Not creating a new node peer as this would duplicate an existing
@@ -256,7 +254,7 @@ func (c *bgpController) discoverNodePeer(l log.Logger, node *v1.Node) {
 			// The discovered node peer differs from the existing node peer.
 
 			// Node peer has an outdated config. Update it.
-			l.Log("op", "discoverNodePeer", "node", node.Name, "msg", "updating node peer config")
+			l.Log("op", "discoverNodePeer", "msg", "updating node peer config")
 			if c.nodePeer.BGP != nil {
 				if err := c.nodePeer.BGP.Close(); err != nil {
 					l.Log("op", "discoverNodePeer", "error", err, "peer", c.nodePeer.Cfg.Addr, "msg", "failed to shut down BGP session")
@@ -268,7 +266,7 @@ func (c *bgpController) discoverNodePeer(l log.Logger, node *v1.Node) {
 	}
 
 	// Peer doesn't exist. Create it.
-	l.Log("op", "discoverNodePeer", "node", node.Name, "msg", "creating node peer")
+	l.Log("op", "discoverNodePeer", "msg", "creating node peer")
 	c.nodePeer = discovered
 }
 
@@ -416,7 +414,7 @@ func (c *bgpController) SetNode(l log.Logger, node *v1.Node) error {
 	c.nodeAnnotations = anns
 	c.nodeLabels = ls
 
-	c.discoverNodePeer(l, node)
+	c.discoverNodePeer(l)
 
 	l.Log("event", "nodeChanged", "msg", "Node changed, resyncing BGP peers")
 	return c.syncPeers(l)
@@ -471,7 +469,7 @@ func (c *bgpController) StatsHandler() func(w http.ResponseWriter, r *http.Reque
 // parseNodePeer attempts to construct a BGP peer from information conveyed
 // in node annotations and labels using the specified autodiscovery
 // configuration.
-func parseNodePeer(l log.Logger, pad *config.PeerAutodiscovery, node *v1.Node) (*peer, error) {
+func parseNodePeer(l log.Logger, pad *config.PeerAutodiscovery, anns labels.Set, ls labels.Set) (*peer, error) {
 	var (
 		myASN       uint32
 		peerASN     uint32
@@ -492,7 +490,7 @@ func parseNodePeer(l log.Logger, pad *config.PeerAutodiscovery, node *v1.Node) (
 	// shouldn't try to discover a peer for this node.
 	shouldDiscover := false
 	for _, ns := range pad.NodeSelectors {
-		if ns.Matches(labels.Set(node.Labels)) {
+		if ns.Matches(ls) {
 			shouldDiscover = true
 			break
 		}
@@ -519,7 +517,7 @@ func parseNodePeer(l log.Logger, pad *config.PeerAutodiscovery, node *v1.Node) (
 	}
 
 	if pad.FromLabels != nil {
-		for k, v := range node.Labels {
+		for k, v := range ls {
 			switch k {
 			case pad.FromLabels.MyASN:
 				asn, err := strconv.ParseUint(v, 10, 32)
@@ -556,7 +554,7 @@ func parseNodePeer(l log.Logger, pad *config.PeerAutodiscovery, node *v1.Node) (
 	}
 
 	if pad.FromAnnotations != nil {
-		for k, v := range node.Annotations {
+		for k, v := range anns {
 			switch k {
 			case pad.FromAnnotations.MyASN:
 				asn, err := strconv.ParseUint(v, 10, 32)
@@ -621,7 +619,7 @@ func parseNodePeer(l log.Logger, pad *config.PeerAutodiscovery, node *v1.Node) (
 
 	// The peer is configured on a specific node object, so we want to create a
 	// BGP session only on that node.
-	h := node.Labels[v1.LabelHostname]
+	h := ls[v1.LabelHostname]
 	if h == "" {
 		return nil, fmt.Errorf("label %s not found on node", v1.LabelHostname)
 	}
