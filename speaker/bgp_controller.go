@@ -247,7 +247,7 @@ func (c *bgpController) discoverNodePeer(l log.Logger) {
 	}
 
 	if nodePeerExists {
-		if !reflect.DeepEqual(c.nodePeer.Cfg, discovered.Cfg) {
+		if !bgpConfigEqual(c.nodePeer.Cfg, discovered.Cfg) {
 			// The discovered node peer differs from the existing node peer.
 
 			// Node peer has an outdated config. Update it.
