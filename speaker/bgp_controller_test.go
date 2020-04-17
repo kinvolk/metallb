@@ -1429,7 +1429,6 @@ func TestDiscoverNodePeer(t *testing.T) {
 					NodeSelectors: []labels.Selector{mustSelector("kubernetes.io/hostname=test")},
 				},
 			},
-			wantNodePeer: nil,
 		},
 		{
 			desc:        "Existing peer, node peer with identical config ignored",
