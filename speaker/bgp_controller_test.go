@@ -1546,6 +1546,14 @@ func TestNodePeers(t *testing.T) {
 		HoldTime:      90 * time.Second,
 		NodeSelectors: []labels.Selector{labels.Everything()},
 	}
+	pad := &config.PeerAutodiscovery{
+		FromAnnotations: &config.PeerAutodiscoveryMapping{
+			MyASN: "example.com/my-asn",
+			ASN:   "example.com/asn",
+			Addr:  "example.com/addr",
+		},
+		NodeSelectors: []labels.Selector{labels.Everything()},
+	}
 
 	tests := []struct {
 		desc            string
@@ -1558,36 +1566,40 @@ func TestNodePeers(t *testing.T) {
 		{
 			desc: "Regular peer modified, node peer remains intact",
 			initialPeers: []*peer{
-				{Cfg: p1},
+				{Cfg: p2},
 			},
-			initialNodePeer: &peer{Cfg: p2},
+			initialNodePeer: &peer{Cfg: p1},
 			cfg: &config.Config{
-				Peers: []*config.Peer{p3},
+				Peers:             []*config.Peer{p3},
+				PeerAutodiscovery: pad,
 			},
 			wantPeers: []*peer{
 				{Cfg: p3},
 			},
-			wantNodePeer: &peer{Cfg: p2},
+			wantNodePeer: &peer{Cfg: p1},
 		},
 		{
 			desc: "Regular peer modified to be identical to node peer",
 			initialPeers: []*peer{
-				{Cfg: p1},
+				{Cfg: p2},
 			},
-			initialNodePeer: &peer{Cfg: p2},
+			initialNodePeer: &peer{Cfg: p1},
 			cfg: &config.Config{
-				Peers: []*config.Peer{p2},
+				Peers:             []*config.Peer{p1},
+				PeerAutodiscovery: pad,
 			},
 			wantPeers: []*peer{
-				{Cfg: p2},
+				{Cfg: p1},
 			},
 		},
 		{
 			desc:            "No peers in config, node peer remains intact",
 			initialNodePeer: &peer{Cfg: p1},
-			cfg:             &config.Config{},
-			wantPeers:       []*peer{},
-			wantNodePeer:    &peer{Cfg: p1},
+			cfg: &config.Config{
+				PeerAutodiscovery: pad,
+			},
+			wantPeers:    []*peer{},
+			wantNodePeer: &peer{Cfg: p1},
 		},
 		{
 			desc:            "Regular peer identical to node peer except node selector",
@@ -1603,6 +1615,7 @@ func TestNodePeers(t *testing.T) {
 						NodeSelectors: []labels.Selector{mustSelector("foo=bar")},
 					},
 				},
+				PeerAutodiscovery: pad,
 			},
 			wantPeers: []*peer{
 				{
@@ -1618,19 +1631,18 @@ func TestNodePeers(t *testing.T) {
 			},
 		},
 		{
-			desc: "Peer autodiscovery enabled",
+			desc: "Peer autodiscovery enabled, node peer discovered",
 			cfg: &config.Config{
-				PeerAutodiscovery: &config.PeerAutodiscovery{
-					FromAnnotations: &config.PeerAutodiscoveryMapping{
-						MyASN: "example.com/my-asn",
-						ASN:   "example.com/asn",
-						Addr:  "example.com/addr",
-					},
-					NodeSelectors: []labels.Selector{labels.Everything()},
-				},
+				PeerAutodiscovery: pad,
 			},
 			wantPeers:    []*peer{},
 			wantNodePeer: &peer{Cfg: p1},
+		},
+		{
+			desc:            "Peer autodiscovery disabled, node peer removed",
+			initialNodePeer: &peer{Cfg: p1},
+			cfg:             &config.Config{},
+			wantPeers:       []*peer{},
 		},
 	}
 

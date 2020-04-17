@@ -53,16 +53,9 @@ type bgpController struct {
 func (c *bgpController) SetConfig(l log.Logger, cfg *config.Config) error {
 	c.peerAutodiscovery = cfg.PeerAutodiscovery
 
-	c.discoverNodePeer(l)
-
 	newPeers := make([]*peer, 0, len(cfg.Peers))
 newPeers:
 	for _, p := range cfg.Peers {
-		if c.nodePeer != nil && bgpConfigEqual(p, c.nodePeer.Cfg) {
-			// Existing node peer matches config of current peer - discard node
-			// peer.
-			c.deleteNodePeer(l)
-		}
 		for i, ep := range c.peers {
 			if ep == nil {
 				continue
@@ -93,6 +86,8 @@ newPeers:
 			}
 		}
 	}
+
+	c.discoverNodePeer(l)
 
 	return c.syncPeers(l)
 }
@@ -202,8 +197,10 @@ func (c *bgpController) syncPeers(l log.Logger) error {
 // autodiscovery is configured.
 func (c *bgpController) discoverNodePeer(l log.Logger) {
 	if c.peerAutodiscovery == nil {
-		l.Log("op", "discoverNodePeer", "msg", "peer autodiscovery not configured")
-		// TODO: Remove any existing node peer?
+		if c.nodePeer != nil {
+			l.Log("op", "discoverNodePeer", "msg", "peer autodiscovery not configured - removing node peer")
+			c.deleteNodePeer(l)
+		}
 		return
 	}
 
