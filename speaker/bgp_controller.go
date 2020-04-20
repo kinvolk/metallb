@@ -270,9 +270,11 @@ func (c *bgpController) discoverNodePeer(l log.Logger) {
 // If a node peer exists, shuts down its BGP session and removes the node peer.
 func (c *bgpController) deleteNodePeer(l log.Logger) {
 	if c.nodePeer == nil {
+		l.Log("op", "deleteNodePeer", "msg", "Nil node peer - nothing to do")
 		return
 	}
 	if c.nodePeer.BGP != nil {
+		l.Log("op", "deleteNodePeer", "msg", "Shutting down BGP session")
 		if err := c.nodePeer.BGP.Close(); err != nil {
 			l.Log("op", "deleteNodePeer", "error", err, "peer", c.nodePeer.Cfg.Addr, "msg", "failed to shut down BGP session")
 		}
