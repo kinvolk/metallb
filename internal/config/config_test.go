@@ -71,6 +71,7 @@ peer-autodiscovery:
   defaults:
     my-asn: 100
     peer-asn: 200
+    peer-address: 10.0.0.1
     peer-port: 1179
     hold-time: 180s
   from-annotations:
@@ -144,6 +145,7 @@ address-pools:
 					Defaults: &PeerAutodiscoveryDefaults{
 						MyASN:    100,
 						ASN:      200,
+						Address:  net.ParseIP("10.0.0.1"),
 						Port:     1179,
 						HoldTime: 180 * time.Second,
 					},
@@ -723,6 +725,7 @@ peer-autodiscovery:
   defaults:
     my-asn: 100
     peer-asn: 200
+    peer-address: 10.0.0.1
     peer-port: 1179
     hold-time: 30s
   from-annotations:
@@ -734,6 +737,7 @@ peer-autodiscovery:
 					Defaults: &PeerAutodiscoveryDefaults{
 						MyASN:    100,
 						ASN:      200,
+						Address:  net.ParseIP("10.0.0.1"),
 						Port:     1179,
 						HoldTime: 30 * time.Second,
 					},

@@ -1173,9 +1173,6 @@ func TestParseNodePeer(t *testing.T) {
 		},
 		{
 			desc: "Use all defaults",
-			annotations: labels.Set(map[string]string{
-				"example.com/addr": "10.0.0.1",
-			}),
 			labels: labels.Set(map[string]string{
 				"kubernetes.io/hostname": "test",
 			}),
@@ -1183,6 +1180,7 @@ func TestParseNodePeer(t *testing.T) {
 				Defaults: &config.PeerAutodiscoveryDefaults{
 					ASN:      65001,
 					MyASN:    65000,
+					Address:  net.ParseIP("10.0.0.1"),
 					Port:     1179,
 					HoldTime: 30 * time.Second,
 				},

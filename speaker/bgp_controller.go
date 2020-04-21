@@ -507,6 +507,9 @@ func parseNodePeer(l log.Logger, pad *config.PeerAutodiscovery, anns labels.Set,
 		if pad.Defaults.MyASN != 0 {
 			myASN = pad.Defaults.MyASN
 		}
+		if pad.Defaults.Address != nil {
+			peerAddr = pad.Defaults.Address
+		}
 		if pad.Defaults.Port != 0 {
 			peerPort = pad.Defaults.Port
 		}

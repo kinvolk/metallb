@@ -58,6 +58,7 @@ type peerAutodiscovery struct {
 type peerAutodiscoveryDefaults struct {
 	MyASN    uint32 `yaml:"my-asn"`
 	ASN      uint32 `yaml:"peer-asn"`
+	Address  string `yaml:"peer-address"`
 	Port     uint16 `yaml:"peer-port"`
 	HoldTime string `yaml:"hold-time"`
 }
@@ -147,6 +148,8 @@ type PeerAutodiscoveryDefaults struct {
 	MyASN uint32
 	// AS number to expect from the remote end of the session.
 	ASN uint32
+	// Address to dial when establishing the session.
+	Address net.IP
 	// Port to dial when establishing the session.
 	Port uint16
 	// Requested BGP hold time, per RFC4271.
@@ -419,9 +422,10 @@ func parsePeerAutodiscovery(p peerAutodiscovery) (*PeerAutodiscovery, error) {
 
 	if p.Defaults != nil {
 		pad.Defaults = &PeerAutodiscoveryDefaults{
-			ASN:   p.Defaults.ASN,
-			MyASN: p.Defaults.MyASN,
-			Port:  p.Defaults.Port,
+			ASN:     p.Defaults.ASN,
+			MyASN:   p.Defaults.MyASN,
+			Address: net.ParseIP(p.Defaults.Address),
+			Port:    p.Defaults.Port,
 		}
 
 		if p.Defaults.HoldTime != "" {
@@ -669,6 +673,9 @@ func validatePeerAutodiscovery(p PeerAutodiscovery) error {
 		}
 		if d.ASN != 0 {
 			peerASNOK = true
+		}
+		if d.Address != nil {
+			peerAddressOK = true
 		}
 	}
 
