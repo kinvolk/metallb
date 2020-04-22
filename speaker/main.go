@@ -171,16 +171,16 @@ func main() {
 		}()
 	}
 
-	// Serve stats for each protocol over HTTP.
+	// Serve status for each protocol over HTTP.
 	for p := range ctrl.protocols {
-		http.HandleFunc(fmt.Sprintf("/stats/%s", p), ctrl.protocols[p].StatsHandler())
+		http.HandleFunc(fmt.Sprintf("/status/%s", p), ctrl.protocols[p].StatusHandler())
 	}
 	go func() {
 		logger.Log("op", "startup", "msg", "starting stats handler")
 		// TODO: Parameterize host and port.
 		err := http.ListenAndServe(":8080", nil)
 		if err != nil {
-			logger.Log("op", "startup", "error", err, "msg", "listening for stats requests")
+			logger.Log("op", "startup", "error", err, "msg", "listening for status requests")
 		}
 	}()
 
@@ -441,5 +441,5 @@ type Protocol interface {
 	SetBalancer(gokitlog.Logger, string, net.IP, *config.Pool) error
 	DeleteBalancer(gokitlog.Logger, string, string) error
 	SetNode(gokitlog.Logger, *v1.Node) error
-	StatsHandler() func(w http.ResponseWriter, r *http.Request)
+	StatusHandler() func(w http.ResponseWriter, r *http.Request)
 }

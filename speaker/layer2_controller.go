@@ -115,7 +115,7 @@ func (c *layer2Controller) SetNode(log.Logger, *v1.Node) error {
 	return nil
 }
 
-func (c *layer2Controller) StatsHandler() func(w http.ResponseWriter, r *http.Request) {
+func (c *layer2Controller) StatusHandler() func(w http.ResponseWriter, r *http.Request) {
 	return func(w http.ResponseWriter, r *http.Request) {
 		fmt.Fprintln(w, "not implemented")
 	}

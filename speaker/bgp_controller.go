@@ -419,7 +419,7 @@ func (c *bgpController) SetNode(l log.Logger, node *v1.Node) error {
 	return c.syncPeers(l)
 }
 
-func (c *bgpController) StatsHandler() func(w http.ResponseWriter, r *http.Request) {
+func (c *bgpController) StatusHandler() func(w http.ResponseWriter, r *http.Request) {
 	return func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 
@@ -458,7 +458,7 @@ func (c *bgpController) StatsHandler() func(w http.ResponseWriter, r *http.Reque
 
 		j, err := json.MarshalIndent(res, "", "  ")
 		if err != nil {
-			http.Error(w, fmt.Sprintf("Failed to get stats: %s", err), 500)
+			http.Error(w, fmt.Sprintf("Failed to get status: %s", err), 500)
 			return
 		}
 		fmt.Fprint(w, string(j))
