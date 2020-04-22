@@ -65,3 +65,52 @@ In addition to the above, make sure to watch the logs of MetalLB's speaker compo
 $ kubetail -l component=speaker -n metallb-system
 ...
 ```
+
+## Status Endpoint
+
+MetalLB's speaker component exposes an HTTP endpoint which provides information
+about the speaker's current in-memory status. The status endpoint currently
+provides information about BGP peering status.
+
+{{% notice note %}}
+The status endpoint is exposed internally within the pod and should not be
+exposed to the public internet.
+{{% /notice %}}
+
+To query the status endpoint of a speaker pod, use `kubectl` to forward a local
+port to port `7473` on the pod:
+
+```
+$ kubectl -n metallb-system port-forward speaker-8l8gk 7473:7473
+```
+
+Then, use `curl` (or a browser) to query the endpoint:
+
+```
+$ curl localhost:7473/status/bgp
+{
+  "Peers": [
+    {
+      "Cfg": {
+        "MyASN": 65000,
+        "ASN": 65530,
+        "Addr": "10.0.0.2",
+        "Port": 179,
+        "HoldTime": 90000000000,
+        "RouterID": "",
+        "NodeSelectors": [
+          [
+            {}
+          ]
+        ],
+        "Password": "REDACTED"
+      },
+      "BGP": {}
+    }
+  ],
+  "NodePeer": {
+    "Cfg": null,
+    "BGP": null
+  }
+}
+```
