@@ -96,7 +96,7 @@ type fakeBGP struct {
 	gotAds map[string][]*bgp.Advertisement
 }
 
-func (f *fakeBGP) New(_ log.Logger, addr string, _ uint32, _ net.IP, _ uint32, _ time.Duration, _, _ string) (session, error) {
+func (f *fakeBGP) New(_ log.Logger, addr string, _ string, _ uint32, _ net.IP, _ uint32, _ time.Duration, _, _ string) (session, error) {
 	f.Lock()
 	defer f.Unlock()
 
@@ -1064,6 +1064,7 @@ func TestParseNodePeer(t *testing.T) {
 		ASN:      "example.com/asn",
 		Addr:     "example.com/addr",
 		Port:     "example.com/port",
+		SrcAddr:  "example.com/src-addr",
 		HoldTime: "example.com/hold-time",
 		RouterID: "example.com/router-id",
 	}
@@ -1083,6 +1084,7 @@ func TestParseNodePeer(t *testing.T) {
 				"example.com/asn":       "65001",
 				"example.com/addr":      "10.0.0.1",
 				"example.com/port":      "1179",
+				"example.com/src-addr":  "10.0.0.2",
 				"example.com/hold-time": "30s",
 				"example.com/router-id": "10.0.0.2",
 			}),
@@ -1100,6 +1102,7 @@ func TestParseNodePeer(t *testing.T) {
 					Addr:     net.ParseIP("10.0.0.1"),
 					HoldTime: 30 * time.Second,
 					Port:     1179,
+					SrcAddr:  net.ParseIP("10.0.0.2"),
 					NodeSelectors: []labels.Selector{
 						mustSelector(fmt.Sprintf("%s=%s", v1.LabelHostname, "test")),
 					},
@@ -1116,6 +1119,7 @@ func TestParseNodePeer(t *testing.T) {
 				"example.com/asn":        "65001",
 				"example.com/addr":       "10.0.0.1",
 				"example.com/port":       "1179",
+				"example.com/src-addr":   "10.0.0.2",
 				"example.com/hold-time":  "30s",
 				"example.com/router-id":  "10.0.0.2",
 			}),
@@ -1130,6 +1134,7 @@ func TestParseNodePeer(t *testing.T) {
 					Addr:     net.ParseIP("10.0.0.1"),
 					HoldTime: 30 * time.Second,
 					Port:     1179,
+					SrcAddr:  net.ParseIP("10.0.0.2"),
 					NodeSelectors: []labels.Selector{
 						mustSelector(fmt.Sprintf("%s=%s", v1.LabelHostname, "test")),
 					},
@@ -1143,6 +1148,7 @@ func TestParseNodePeer(t *testing.T) {
 				"example.com/my-asn":    "65000",
 				"example.com/addr":      "10.0.0.1",
 				"example.com/hold-time": "30s",
+				"example.com/src-addr":  "10.0.0.2",
 			}),
 			labels: labels.Set(map[string]string{
 				"kubernetes.io/hostname": "test",
@@ -1155,6 +1161,7 @@ func TestParseNodePeer(t *testing.T) {
 				FromAnnotations: &config.PeerAutodiscoveryMapping{
 					MyASN:    "example.com/my-asn",
 					Addr:     "example.com/addr",
+					SrcAddr:  "example.com/src-addr",
 					HoldTime: "example.com/hold-time",
 				},
 				FromLabels: &config.PeerAutodiscoveryMapping{
@@ -1170,6 +1177,7 @@ func TestParseNodePeer(t *testing.T) {
 					Addr:     net.ParseIP("10.0.0.1"),
 					HoldTime: 30 * time.Second,
 					Port:     1179,
+					SrcAddr:  net.ParseIP("10.0.0.2"),
 					NodeSelectors: []labels.Selector{
 						mustSelector(fmt.Sprintf("%s=%s", v1.LabelHostname, "test")),
 					},
@@ -1213,6 +1221,7 @@ func TestParseNodePeer(t *testing.T) {
 				"example.com/asn":       "65001",
 				"example.com/addr":      "10.0.0.1",
 				"example.com/port":      "1179",
+				"example.com/src-addr":  "10.0.0.2",
 				"example.com/hold-time": "30s",
 				"example.com/router-id": "10.0.0.2",
 			}),
@@ -1222,6 +1231,7 @@ func TestParseNodePeer(t *testing.T) {
 				"example.com/asn":        "65001",
 				"example.com/addr":       "10.0.0.1",
 				"example.com/port":       "1179",
+				"example.com/src-addr":   "10.0.0.2",
 				"example.com/hold-time":  "30s",
 				"example.com/router-id":  "10.0.0.2",
 			}),
@@ -1234,6 +1244,7 @@ func TestParseNodePeer(t *testing.T) {
 				"example.com/asn":       "65001",
 				"example.com/addr":      "10.0.0.1",
 				"example.com/port":      "1179",
+				"example.com/src-addr":  "10.0.0.2",
 				"example.com/hold-time": "30s",
 				"example.com/router-id": "10.0.0.2",
 			}),
@@ -1243,6 +1254,7 @@ func TestParseNodePeer(t *testing.T) {
 				"example.com/asn":        "65003",
 				"example.com/addr":       "10.0.0.3",
 				"example.com/port":       "2179",
+				"example.com/src-addr":   "10.0.0.4",
 				"example.com/hold-time":  "120s",
 				"example.com/router-id":  "10.0.0.4",
 			}),
@@ -1258,6 +1270,7 @@ func TestParseNodePeer(t *testing.T) {
 					Addr:     net.ParseIP("10.0.0.1"),
 					HoldTime: 30 * time.Second,
 					Port:     1179,
+					SrcAddr:  net.ParseIP("10.0.0.2"),
 					NodeSelectors: []labels.Selector{
 						mustSelector(fmt.Sprintf("%s=%s", v1.LabelHostname, "test")),
 					},
@@ -1407,6 +1420,25 @@ func TestParseNodePeer(t *testing.T) {
 			wantErr: true,
 		},
 		{
+			desc: "Malformed source IP",
+			annotations: labels.Set(map[string]string{
+				"example.com/my-asn":   "65000",
+				"example.com/asn":      "65001",
+				"example.com/addr":     "10.0.0.1",
+				"example.com/src-addr": "oops",
+			}),
+			labels: labels.Set(map[string]string{
+				"kubernetes.io/hostname": "test",
+			}),
+			pad: &config.PeerAutodiscovery{
+				NodeSelectors: []labels.Selector{
+					mustSelector(fmt.Sprintf("%s=%s", v1.LabelHostname, "test")),
+				},
+				FromAnnotations: pam,
+			},
+			wantErr: true,
+		},
+		{
 			desc: "Malformed hold time",
 			annotations: labels.Set(map[string]string{
 				"example.com/my-asn":    "65000",
@@ -1506,15 +1538,17 @@ func TestDiscoverNodePeer(t *testing.T) {
 		"example.com/my-asn":       "100",
 		"example.com/peer-asn":     "200",
 		"example.com/peer-address": "10.0.0.1",
+		"example.com/src-address":  "10.0.0.5",
 	}
 	ls := map[string]string{
 		"kubernetes.io/hostname": "test",
 	}
 	pad := &config.PeerAutodiscovery{
 		FromAnnotations: &config.PeerAutodiscoveryMapping{
-			MyASN: "example.com/my-asn",
-			ASN:   "example.com/peer-asn",
-			Addr:  "example.com/peer-address",
+			MyASN:   "example.com/my-asn",
+			ASN:     "example.com/peer-asn",
+			Addr:    "example.com/peer-address",
+			SrcAddr: "example.com/src-address",
 		},
 		NodeSelectors: []labels.Selector{
 			mustSelector(fmt.Sprintf("%s=%s", v1.LabelHostname, "test")),
@@ -1537,6 +1571,7 @@ func TestDiscoverNodePeer(t *testing.T) {
 					ASN:           200,
 					Addr:          net.ParseIP("10.0.0.1"),
 					Port:          179,
+					SrcAddr:       net.ParseIP("10.0.0.5"),
 					HoldTime:      90 * time.Second,
 					NodeSelectors: []labels.Selector{mustSelector("kubernetes.io/hostname=test")},
 				},
@@ -1590,6 +1625,7 @@ func TestNodePeers(t *testing.T) {
 		ASN:      200,
 		Addr:     net.ParseIP("10.0.0.1"),
 		Port:     179,
+		SrcAddr:  net.ParseIP("10.0.0.5"),
 		HoldTime: 90 * time.Second,
 		NodeSelectors: []labels.Selector{
 			mustSelector(fmt.Sprintf("%s=%s", v1.LabelHostname, "test")),
@@ -1613,9 +1649,10 @@ func TestNodePeers(t *testing.T) {
 	}
 	pad := &config.PeerAutodiscovery{
 		FromAnnotations: &config.PeerAutodiscoveryMapping{
-			MyASN: "example.com/my-asn",
-			ASN:   "example.com/asn",
-			Addr:  "example.com/addr",
+			MyASN:   "example.com/my-asn",
+			ASN:     "example.com/asn",
+			Addr:    "example.com/addr",
+			SrcAddr: "example.com/src-addr",
 		},
 		NodeSelectors: []labels.Selector{labels.Everything()},
 	}
@@ -1729,7 +1766,14 @@ func TestNodePeers(t *testing.T) {
 		{
 			desc: "Regular peer identical to node peer, selectors match",
 			peers: []*peer{
-				{Cfg: nodePeer},
+				{Cfg: &config.Peer{
+					MyASN:         nodePeer.MyASN,
+					ASN:           nodePeer.ASN,
+					Addr:          nodePeer.Addr,
+					Port:          nodePeer.Port,
+					HoldTime:      nodePeer.HoldTime,
+					NodeSelectors: []labels.Selector{labels.Everything()},
+				}},
 			},
 			cfg: &config.Config{
 				Peers: []*config.Peer{
@@ -1789,6 +1833,35 @@ func TestNodePeers(t *testing.T) {
 				{Cfg: nodePeer},
 			},
 		},
+		{
+			desc: "Regular peer identical to node peer except source address",
+			peers: []*peer{
+				{Cfg: nodePeer},
+			},
+			cfg: &config.Config{
+				Peers: []*config.Peer{
+					{
+						MyASN:         nodePeer.MyASN,
+						ASN:           nodePeer.ASN,
+						Addr:          nodePeer.Addr,
+						Port:          nodePeer.Port,
+						HoldTime:      nodePeer.HoldTime,
+						NodeSelectors: nodePeer.NodeSelectors,
+					},
+				},
+				PeerAutodiscovery: pad,
+			},
+			wantPeers: []*peer{
+				{Cfg: &config.Peer{
+					MyASN:         nodePeer.MyASN,
+					ASN:           nodePeer.ASN,
+					Addr:          nodePeer.Addr,
+					Port:          nodePeer.Port,
+					HoldTime:      nodePeer.HoldTime,
+					NodeSelectors: nodePeer.NodeSelectors,
+				}},
+			},
+		},
 	}
 
 	comparer := func(a, b *peer) bool {
@@ -1801,9 +1874,10 @@ func TestNodePeers(t *testing.T) {
 		myNode: "pandora",
 		svcAds: make(map[string][]*bgp.Advertisement),
 		nodeAnnotations: labels.Set(map[string]string{
-			"example.com/my-asn": "100",
-			"example.com/asn":    "200",
-			"example.com/addr":   "10.0.0.1",
+			"example.com/my-asn":   "100",
+			"example.com/asn":      "200",
+			"example.com/addr":     "10.0.0.1",
+			"example.com/src-addr": "10.0.0.5",
 		}),
 		nodeLabels: labels.Set(map[string]string{
 			"kubernetes.io/hostname": "test",

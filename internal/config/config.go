@@ -68,6 +68,7 @@ type peerAutodiscoveryMapping struct {
 	ASN      string `yaml:"peer-asn"`
 	Addr     string `yaml:"peer-address"`
 	Port     string `yaml:"peer-port"`
+	SrcAddr  string `yaml:"src-address"`
 	HoldTime string `yaml:"hold-time"`
 	RouterID string `yaml:"router-id"`
 }
@@ -127,6 +128,8 @@ type Peer struct {
 	Addr net.IP
 	// Port to dial when establishing the session.
 	Port uint16
+	// Source address to use when establishing the session.
+	SrcAddr net.IP
 	// Requested BGP hold time, per RFC4271.
 	HoldTime time.Duration
 	// BGP router ID to advertise to the peer
@@ -177,6 +180,7 @@ type PeerAutodiscoveryMapping struct {
 	ASN      string
 	Addr     string
 	Port     string
+	SrcAddr  string
 	HoldTime string
 	RouterID string
 }
@@ -457,6 +461,7 @@ func parsePeerAutodiscovery(p peerAutodiscovery) (*PeerAutodiscovery, error) {
 		pad.FromAnnotations = &PeerAutodiscoveryMapping{
 			ASN:      p.FromAnnotations.ASN,
 			Addr:     p.FromAnnotations.Addr,
+			SrcAddr:  p.FromAnnotations.SrcAddr,
 			HoldTime: p.FromAnnotations.HoldTime,
 			MyASN:    p.FromAnnotations.MyASN,
 			Port:     p.FromAnnotations.Port,
@@ -468,6 +473,7 @@ func parsePeerAutodiscovery(p peerAutodiscovery) (*PeerAutodiscovery, error) {
 		pad.FromLabels = &PeerAutodiscoveryMapping{
 			ASN:      p.FromLabels.ASN,
 			Addr:     p.FromLabels.Addr,
+			SrcAddr:  p.FromLabels.SrcAddr,
 			HoldTime: p.FromLabels.HoldTime,
 			MyASN:    p.FromLabels.MyASN,
 			Port:     p.FromLabels.Port,

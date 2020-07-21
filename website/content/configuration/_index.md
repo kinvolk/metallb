@@ -358,6 +358,27 @@ This means that if the same BGP configuration parameter is specified using both
 an annotation and a label, the value from the annotation is used. A default
 value is used only if no relevant annotation or label is specified.
 
+Peer autodiscovery allows specifying the **source IP address** which should be
+used when establishing BGP sessions. This is useful in cases where a MetalLB
+speaker is running on a node which has multiple network interfaces and the
+address selected by the node's kernel isn't the desired one. BGP source
+addresses can be specified only when using peer autodiscovery. Following is a
+sample configuration:
+
+```yaml
+peer-autodiscovery:
+  from-annotations:
+    my-asn: example.com/my-asn
+    peer-asn: example.com/peer-asn
+    peer-address: example.com/peer-address
+    src-address: example.com/src-address
+```
+
+The configuration above instructs MetalLB to set the source IP address of BGP
+sessions created by a node to the value specified in the
+`example.com/src-address` annotation. If the address doesn't exist on the node,
+MetalLB falls back to letting the kernel figure out the source address.
+
 ## Advanced address pool configuration
 
 ### Controlling automatic address allocation

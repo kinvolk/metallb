@@ -29,6 +29,7 @@ type Session struct {
 	routerID         net.IP // May be nil, meaning "derive from context"
 	myNode           string
 	addr             string
+	srcAddr          string
 	peerASN          uint32
 	peerFBASNSupport bool
 	holdTime         time.Duration
@@ -170,7 +171,7 @@ func (s *Session) connect() error {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 	deadline, _ := ctx.Deadline()
-	conn, err := dialMD5(ctx, s.addr, s.password)
+	conn, err := dialMD5(ctx, s.addr, s.srcAddr, s.password)
 	if err != nil {
 		return fmt.Errorf("dial %q: %s", s.addr, err)
 	}
@@ -351,9 +352,10 @@ func (s *Session) sendKeepalive() error {
 //
 // The session will immediately try to connect and synchronize its
 // local state with the peer.
-func New(l log.Logger, addr string, asn uint32, routerID net.IP, peerASN uint32, holdTime time.Duration, password string, myNode string) (*Session, error) {
+func New(l log.Logger, addr string, srcAddr string, asn uint32, routerID net.IP, peerASN uint32, holdTime time.Duration, password string, myNode string) (*Session, error) {
 	ret := &Session{
 		addr:        addr,
+		srcAddr:     srcAddr,
 		asn:         asn,
 		routerID:    routerID.To4(),
 		myNode:      myNode,
@@ -519,8 +521,17 @@ type tcpmd5sig struct {
 // proper TCP MD5 options when the password is not empty. Works by manupulating
 // the low level FD's, skipping the net.Conn API as it has not hooks to set
 // the neccessary sockopts for TCP MD5.
-func dialMD5(ctx context.Context, addr, password string) (net.Conn, error) {
-	laddr, err := net.ResolveTCPAddr("tcp", "[::]:0")
+func dialMD5(ctx context.Context, addr string, srcAddr string, password string) (net.Conn, error) {
+	// "::" is the IPv6 "unspecified address". It is the address which should
+	// be used to tell the Linux kernel to figure out the source address for a
+	// TCP socket *both* for IPv6 and for IPv4.
+	a := "::"
+	if srcAddr != "" {
+		// The user has requested a specific source address for the BGP
+		// session - use that address instead of the default.
+		a = srcAddr
+	}
+	laddr, err := net.ResolveTCPAddr("tcp", net.JoinHostPort(a, "0"))
 	if err != nil {
 		return nil, fmt.Errorf("Error resolving local address: %s ", err)
 	}
