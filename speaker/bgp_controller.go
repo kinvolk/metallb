@@ -189,6 +189,7 @@ newPeers:
 			"peerASN", p.ASN,
 			"peerAddress", p.Addr,
 			"port", p.Port,
+			"srcAddress", p.SrcAddr,
 			"holdTime", p.HoldTime,
 			"routerID", p.RouterID,
 			"msg", "adding new peer configuration",
@@ -355,6 +356,7 @@ func (c *bgpController) syncBGPSessions(l log.Logger, peers []*peer) (needUpdate
 				"peerASN", p.Cfg.ASN,
 				"peerAddress", p.Cfg.Addr,
 				"port", p.Cfg.Port,
+				"srcAddress", p.Cfg.SrcAddr,
 				"holdTime", p.Cfg.HoldTime,
 				"routerID", p.Cfg.RouterID,
 				"msg", "peer added, starting BGP session",
@@ -363,7 +365,11 @@ func (c *bgpController) syncBGPSessions(l log.Logger, peers []*peer) (needUpdate
 			if p.Cfg.RouterID != nil {
 				routerID = p.Cfg.RouterID
 			}
-			s, err := newBGP(c.logger, net.JoinHostPort(p.Cfg.Addr.String(), strconv.Itoa(int(p.Cfg.Port))), p.Cfg.MyASN, routerID, p.Cfg.ASN, p.Cfg.HoldTime, p.Cfg.Password, c.myNode)
+			var srcAddr string
+			if p.Cfg.SrcAddr != nil {
+				srcAddr = p.Cfg.SrcAddr.String()
+			}
+			s, err := newBGP(c.logger, net.JoinHostPort(p.Cfg.Addr.String(), strconv.Itoa(int(p.Cfg.Port))), srcAddr, p.Cfg.MyASN, routerID, p.Cfg.ASN, p.Cfg.HoldTime, p.Cfg.Password, c.myNode)
 			if err != nil {
 				l.Log("op", "syncBGPSessions", "error", err, "peer", p.Cfg.Addr, "msg", "failed to create BGP session")
 				errs++
@@ -470,6 +476,7 @@ type statusPeer struct {
 	ASN           uint32
 	Addr          net.IP
 	Port          uint16
+	SrcAddr       net.IP
 	HoldTime      string
 	RouterID      net.IP
 	NodeSelectors []string
@@ -498,6 +505,7 @@ func (c *bgpController) StatusHandler() func(w http.ResponseWriter, r *http.Requ
 				ASN:      p.Cfg.ASN,
 				Addr:     p.Cfg.Addr,
 				Port:     p.Cfg.Port,
+				SrcAddr:  p.Cfg.SrcAddr,
 				HoldTime: p.Cfg.HoldTime.String(),
 				RouterID: p.Cfg.RouterID,
 			}
@@ -543,6 +551,7 @@ func parseNodePeer(l log.Logger, pam *config.PeerAutodiscoveryMapping, d *config
 		peerASN     uint32
 		peerAddr    net.IP
 		peerPort    uint16
+		srcAddr     net.IP
 		holdTime    time.Duration
 		holdTimeRaw string
 		routerID    net.IP
@@ -598,6 +607,11 @@ func parseNodePeer(l log.Logger, pam *config.PeerAutodiscoveryMapping, d *config
 				return nil, fmt.Errorf("parsing peer port: %v", err)
 			}
 			peerPort = uint16(port)
+		case pam.SrcAddr:
+			srcAddr = net.ParseIP(v)
+			if v != "" && srcAddr == nil {
+				return nil, fmt.Errorf("invalid source IP %q", v)
+			}
 		case pam.HoldTime:
 			holdTimeRaw = v
 		case pam.RouterID:
@@ -631,6 +645,7 @@ func parseNodePeer(l log.Logger, pam *config.PeerAutodiscoveryMapping, d *config
 		ASN:      peerASN,
 		Addr:     peerAddr,
 		Port:     peerPort,
+		SrcAddr:  srcAddr,
 		HoldTime: holdTime,
 		RouterID: routerID,
 		// BGP passwords aren't supported for node peers.
@@ -671,6 +686,6 @@ func selectorMatches(ls labels.Set, sel []labels.Selector) bool {
 	return false
 }
 
-var newBGP = func(logger log.Logger, addr string, myASN uint32, routerID net.IP, asn uint32, hold time.Duration, password string, myNode string) (session, error) {
-	return bgp.New(logger, addr, myASN, routerID, asn, hold, password, myNode)
+var newBGP = func(logger log.Logger, addr string, srcAddr string, myASN uint32, routerID net.IP, asn uint32, hold time.Duration, password string, myNode string) (session, error) {
+	return bgp.New(logger, addr, srcAddr, myASN, routerID, asn, hold, password, myNode)
 }

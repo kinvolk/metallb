@@ -96,7 +96,7 @@ type fakeBGP struct {
 	gotAds map[string][]*bgp.Advertisement
 }
 
-func (f *fakeBGP) New(_ log.Logger, addr string, _ uint32, _ net.IP, _ uint32, _ time.Duration, _, _ string) (session, error) {
+func (f *fakeBGP) New(_ log.Logger, addr string, _ string, _ uint32, _ net.IP, _ uint32, _ time.Duration, _, _ string) (session, error) {
 	f.Lock()
 	defer f.Unlock()
 
@@ -1064,6 +1064,7 @@ func TestParseNodePeer(t *testing.T) {
 		ASN:      "example.com/asn",
 		Addr:     "example.com/addr",
 		Port:     "example.com/port",
+		SrcAddr:  "example.com/src-addr",
 		HoldTime: "example.com/hold-time",
 		RouterID: "example.com/router-id",
 	}
@@ -1083,6 +1084,7 @@ func TestParseNodePeer(t *testing.T) {
 				"example.com/asn":       "65001",
 				"example.com/addr":      "10.0.0.1",
 				"example.com/port":      "1179",
+				"example.com/src-addr":  "10.0.0.5",
 				"example.com/hold-time": "30s",
 				"example.com/router-id": "10.0.0.2",
 			}),
@@ -1091,6 +1093,7 @@ func TestParseNodePeer(t *testing.T) {
 				ASN:      65001,
 				MyASN:    65000,
 				Addr:     net.ParseIP("10.0.0.1"),
+				SrcAddr:  net.ParseIP("10.0.0.5"),
 				HoldTime: 30 * time.Second,
 				Port:     1179,
 				RouterID: net.ParseIP("10.0.0.2"),
@@ -1146,6 +1149,7 @@ func TestParseNodePeer(t *testing.T) {
 				"example.com/asn":       "65001",
 				"example.com/addr":      "10.0.0.1",
 				"example.com/port":      "1179",
+				"example.com/src-addr":  "10.0.0.2",
 				"example.com/hold-time": "30s",
 				"example.com/router-id": "10.0.0.2",
 			}),
@@ -1198,6 +1202,17 @@ func TestParseNodePeer(t *testing.T) {
 				"example.com/asn":    "65001",
 				"example.com/addr":   "10.0.0.1",
 				"example.com/port":   "oops",
+			}),
+			mapping: pam,
+			wantErr: true,
+		},
+		{
+			desc: "Malformed source IP",
+			ls: labels.Set(map[string]string{
+				"example.com/my-asn":   "65000",
+				"example.com/asn":      "65001",
+				"example.com/addr":     "10.0.0.1",
+				"example.com/src-addr": "oops",
 			}),
 			mapping: pam,
 			wantErr: true,
@@ -1257,21 +1272,24 @@ func TestDiscoverNodePeers(t *testing.T) {
 	pad := &config.PeerAutodiscovery{
 		FromAnnotations: []*config.PeerAutodiscoveryMapping{
 			{
-				MyASN: "example.com/p1-my-asn",
-				ASN:   "example.com/p1-peer-asn",
-				Addr:  "example.com/p1-peer-address",
+				MyASN:   "example.com/p1-my-asn",
+				ASN:     "example.com/p1-peer-asn",
+				Addr:    "example.com/p1-peer-address",
+				SrcAddr: "example.com/p1-src-address",
 			},
 			{
-				MyASN: "example.com/p2-my-asn",
-				ASN:   "example.com/p2-peer-asn",
-				Addr:  "example.com/p2-peer-address",
+				MyASN:   "example.com/p2-my-asn",
+				ASN:     "example.com/p2-peer-asn",
+				Addr:    "example.com/p2-peer-address",
+				SrcAddr: "example.com/p2-src-address",
 			},
 		},
 		FromLabels: []*config.PeerAutodiscoveryMapping{
 			{
-				MyASN: "example.com/p1-my-asn",
-				ASN:   "example.com/p1-peer-asn",
-				Addr:  "example.com/p1-peer-address",
+				MyASN:   "example.com/p1-my-asn",
+				ASN:     "example.com/p1-peer-asn",
+				Addr:    "example.com/p1-peer-address",
+				SrcAddr: "example.com/p1-src-address",
 			},
 		},
 		NodeSelectors: []labels.Selector{
@@ -1292,6 +1310,7 @@ func TestDiscoverNodePeers(t *testing.T) {
 				"example.com/p1-my-asn":       "100",
 				"example.com/p1-peer-asn":     "200",
 				"example.com/p1-peer-address": "10.0.0.1",
+				"example.com/p1-src-address":  "10.0.0.5",
 			},
 			labels: map[string]string{
 				"kubernetes.io/hostname": "test",
@@ -1304,6 +1323,7 @@ func TestDiscoverNodePeers(t *testing.T) {
 					ASN:           200,
 					Addr:          net.ParseIP("10.0.0.1"),
 					Port:          179,
+					SrcAddr:       net.ParseIP("10.0.0.5"),
 					HoldTime:      90 * time.Second,
 					NodeSelectors: []labels.Selector{mustSelector("kubernetes.io/hostname=test")},
 				},
@@ -1315,9 +1335,11 @@ func TestDiscoverNodePeers(t *testing.T) {
 				"example.com/p1-my-asn":       "100",
 				"example.com/p1-peer-asn":     "200",
 				"example.com/p1-peer-address": "10.0.0.1",
+				"example.com/p1-src-address":  "10.0.0.5",
 				"example.com/p2-my-asn":       "100",
 				"example.com/p2-peer-asn":     "200",
 				"example.com/p2-peer-address": "10.0.0.2",
+				"example.com/p2-src-address":  "10.0.0.5",
 			},
 			labels: map[string]string{
 				"kubernetes.io/hostname": "test",
@@ -1328,6 +1350,7 @@ func TestDiscoverNodePeers(t *testing.T) {
 					MyASN:         100,
 					ASN:           200,
 					Addr:          net.ParseIP("10.0.0.1"),
+					SrcAddr:       net.ParseIP("10.0.0.5"),
 					Port:          179,
 					HoldTime:      90 * time.Second,
 					NodeSelectors: []labels.Selector{mustSelector("kubernetes.io/hostname=test")},
@@ -1337,6 +1360,7 @@ func TestDiscoverNodePeers(t *testing.T) {
 					MyASN:         100,
 					ASN:           200,
 					Addr:          net.ParseIP("10.0.0.2"),
+					SrcAddr:       net.ParseIP("10.0.0.5"),
 					Port:          179,
 					HoldTime:      90 * time.Second,
 					NodeSelectors: []labels.Selector{mustSelector("kubernetes.io/hostname=test")},
@@ -1392,12 +1416,14 @@ func TestDiscoverNodePeers(t *testing.T) {
 				"example.com/p1-my-asn":       "100",
 				"example.com/p1-peer-asn":     "200",
 				"example.com/p1-peer-address": "10.0.0.1",
+				"example.com/p1-src-address":  "10.0.0.5",
 			},
 			labels: map[string]string{
 				"kubernetes.io/hostname":      "test",
 				"example.com/p1-my-asn":       "100",
 				"example.com/p1-peer-asn":     "200",
 				"example.com/p1-peer-address": "10.0.0.2",
+				"example.com/p1-src-address":  "10.0.0.5",
 			},
 			pad: pad,
 			wantPeers: []*config.Peer{
@@ -1406,6 +1432,7 @@ func TestDiscoverNodePeers(t *testing.T) {
 					MyASN:         100,
 					ASN:           200,
 					Addr:          net.ParseIP("10.0.0.1"),
+					SrcAddr:       net.ParseIP("10.0.0.5"),
 					Port:          179,
 					HoldTime:      90 * time.Second,
 					NodeSelectors: []labels.Selector{mustSelector("kubernetes.io/hostname=test")},
@@ -1415,6 +1442,7 @@ func TestDiscoverNodePeers(t *testing.T) {
 					MyASN:         100,
 					ASN:           200,
 					Addr:          net.ParseIP("10.0.0.2"),
+					SrcAddr:       net.ParseIP("10.0.0.5"),
 					Port:          179,
 					HoldTime:      90 * time.Second,
 					NodeSelectors: []labels.Selector{mustSelector("kubernetes.io/hostname=test")},
@@ -1457,6 +1485,7 @@ func TestNodePeers(t *testing.T) {
 		ASN:      200,
 		Addr:     net.ParseIP("10.0.0.1"),
 		Port:     179,
+		SrcAddr:  net.ParseIP("10.0.0.5"),
 		HoldTime: 90 * time.Second,
 		NodeSelectors: []labels.Selector{
 			mustSelector(fmt.Sprintf("%s=%s", v1.LabelHostname, "test")),
@@ -1467,6 +1496,7 @@ func TestNodePeers(t *testing.T) {
 		ASN:      200,
 		Addr:     net.ParseIP("10.0.0.2"),
 		Port:     179,
+		SrcAddr:  net.ParseIP("10.0.0.5"),
 		HoldTime: 90 * time.Second,
 		NodeSelectors: []labels.Selector{
 			mustSelector(fmt.Sprintf("%s=%s", v1.LabelHostname, "test")),
@@ -1491,9 +1521,10 @@ func TestNodePeers(t *testing.T) {
 	pad := &config.PeerAutodiscovery{
 		FromAnnotations: []*config.PeerAutodiscoveryMapping{
 			{
-				MyASN: "example.com/np1-my-asn",
-				ASN:   "example.com/np1-asn",
-				Addr:  "example.com/np1-addr",
+				MyASN:   "example.com/np1-my-asn",
+				ASN:     "example.com/np1-asn",
+				Addr:    "example.com/np1-addr",
+				SrcAddr: "example.com/np1-src-addr",
 			},
 		},
 		NodeSelectors: []labels.Selector{labels.Everything()},
@@ -1501,25 +1532,29 @@ func TestNodePeers(t *testing.T) {
 	padMulti := &config.PeerAutodiscovery{
 		FromAnnotations: []*config.PeerAutodiscoveryMapping{
 			{
-				MyASN: "example.com/np1-my-asn",
-				ASN:   "example.com/np1-asn",
-				Addr:  "example.com/np1-addr",
+				MyASN:   "example.com/np1-my-asn",
+				ASN:     "example.com/np1-asn",
+				Addr:    "example.com/np1-addr",
+				SrcAddr: "example.com/np1-src-addr",
 			},
 			{
-				MyASN: "example.com/np2-my-asn",
-				ASN:   "example.com/np2-asn",
-				Addr:  "example.com/np2-addr",
+				MyASN:   "example.com/np2-my-asn",
+				ASN:     "example.com/np2-asn",
+				Addr:    "example.com/np2-addr",
+				SrcAddr: "example.com/np2-src-addr",
 			},
 		},
 		NodeSelectors: []labels.Selector{labels.Everything()},
 	}
 	anns := map[string]string{
-		"example.com/np1-my-asn": "100",
-		"example.com/np1-asn":    "200",
-		"example.com/np1-addr":   "10.0.0.1",
-		"example.com/np2-my-asn": "100",
-		"example.com/np2-asn":    "200",
-		"example.com/np2-addr":   "10.0.0.2",
+		"example.com/np1-my-asn":   "100",
+		"example.com/np1-asn":      "200",
+		"example.com/np1-addr":     "10.0.0.1",
+		"example.com/np1-src-addr": "10.0.0.5",
+		"example.com/np2-my-asn":   "100",
+		"example.com/np2-asn":      "200",
+		"example.com/np2-addr":     "10.0.0.2",
+		"example.com/np2-src-addr": "10.0.0.5",
 	}
 
 	tests := []struct {
@@ -1696,12 +1731,14 @@ func TestNodePeers(t *testing.T) {
 			},
 			annotations: labels.Set(
 				map[string]string{
-					"example.com/np1-my-asn": "100",
-					"example.com/np1-asn":    "200",
-					"example.com/np1-addr":   "10.0.0.1",
-					"example.com/np2-my-asn": "100",
-					"example.com/np2-asn":    "200",
-					"example.com/np2-addr":   "10.0.0.1",
+					"example.com/np1-my-asn":   "100",
+					"example.com/np1-asn":      "200",
+					"example.com/np1-addr":     "10.0.0.1",
+					"example.com/np1-src-addr": "10.0.0.5",
+					"example.com/np2-my-asn":   "100",
+					"example.com/np2-asn":      "200",
+					"example.com/np2-addr":     "10.0.0.1",
+					"example.com/np2-src-addr": "10.0.0.5",
 				},
 			),
 			wantPeers: []*config.Peer{np1},
@@ -1714,9 +1751,10 @@ func TestNodePeers(t *testing.T) {
 			},
 			annotations: labels.Set(
 				map[string]string{
-					"example.com/np1-my-asn": "100",
-					"example.com/np1-asn":    "200",
-					"example.com/np1-addr":   "10.0.0.1",
+					"example.com/np1-my-asn":   "100",
+					"example.com/np1-asn":      "200",
+					"example.com/np1-addr":     "10.0.0.1",
+					"example.com/np1-src-addr": "10.0.0.5",
 				},
 			),
 			wantPeers: []*config.Peer{np1},

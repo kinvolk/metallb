@@ -51,6 +51,7 @@ type peer struct {
 	ASN           uint32         `yaml:"peer-asn"`
 	Addr          string         `yaml:"peer-address"`
 	Port          uint16         `yaml:"peer-port"`
+	SrcAddr       string         `yaml:"source-address"`
 	HoldTime      string         `yaml:"hold-time"`
 	RouterID      string         `yaml:"router-id"`
 	NodeSelectors []nodeSelector `yaml:"node-selectors"`
@@ -78,6 +79,7 @@ type peerAutodiscoveryMapping struct {
 	ASN      string `yaml:"peer-asn"`
 	Addr     string `yaml:"peer-address"`
 	Port     string `yaml:"peer-port"`
+	SrcAddr  string `yaml:"source-address"`
 	HoldTime string `yaml:"hold-time"`
 	RouterID string `yaml:"router-id"`
 }
@@ -137,6 +139,8 @@ type Peer struct {
 	Addr net.IP
 	// Port to dial when establishing the session.
 	Port uint16
+	// Source address to use when establishing the session.
+	SrcAddr net.IP
 	// Requested BGP hold time, per RFC4271.
 	HoldTime time.Duration
 	// BGP router ID to advertise to the peer
@@ -187,6 +191,7 @@ type PeerAutodiscoveryMapping struct {
 	ASN      string
 	Addr     string
 	Port     string
+	SrcAddr  string
 	HoldTime string
 	RouterID string
 }
@@ -388,6 +393,13 @@ func parsePeer(p peer) (*Peer, error) {
 	if ip == nil {
 		return nil, fmt.Errorf("invalid peer IP %q", p.Addr)
 	}
+	var srcIP net.IP
+	if p.SrcAddr != "" {
+		srcIP = net.ParseIP(p.SrcAddr)
+		if srcIP == nil {
+			return nil, fmt.Errorf("invalid source IP %q", p.SrcAddr)
+		}
+	}
 	holdTime := DefaultBGPHoldTime * time.Second
 	if p.HoldTime != "" {
 		ht, err := ParseHoldTime(p.HoldTime)
@@ -425,6 +437,7 @@ func parsePeer(p peer) (*Peer, error) {
 		ASN:           p.ASN,
 		Addr:          ip,
 		Port:          port,
+		SrcAddr:       srcIP,
 		HoldTime:      holdTime,
 		RouterID:      routerID,
 		NodeSelectors: nodeSels,
@@ -464,6 +477,7 @@ func parsePeerAutodiscovery(p peerAutodiscovery) (*PeerAutodiscovery, error) {
 			pad.FromAnnotations = append(pad.FromAnnotations, &PeerAutodiscoveryMapping{
 				ASN:      pam.ASN,
 				Addr:     pam.Addr,
+				SrcAddr:  pam.SrcAddr,
 				HoldTime: pam.HoldTime,
 				MyASN:    pam.MyASN,
 				Port:     pam.Port,
@@ -477,6 +491,7 @@ func parsePeerAutodiscovery(p peerAutodiscovery) (*PeerAutodiscovery, error) {
 			pad.FromLabels = append(pad.FromLabels, &PeerAutodiscoveryMapping{
 				ASN:      pam.ASN,
 				Addr:     pam.Addr,
+				SrcAddr:  pam.SrcAddr,
 				HoldTime: pam.HoldTime,
 				MyASN:    pam.MyASN,
 				Port:     pam.Port,

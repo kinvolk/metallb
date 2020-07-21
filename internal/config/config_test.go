@@ -79,6 +79,7 @@ peer-autodiscovery:
     peer-asn: example.com/peer-asn
     peer-address: example.com/peer-address
     peer-port: example.com/peer-port
+    source-address: example.com/source-address
     hold-time: example.com/hold-time
     router-id: example.com/router-id
   from-labels:
@@ -86,6 +87,7 @@ peer-autodiscovery:
     peer-asn: example.com/peer-asn
     peer-address: example.com/peer-address
     peer-port: example.com/peer-port
+    source-address: example.com/source-address
     hold-time: example.com/hold-time
     router-id: example.com/router-id
 bgp-communities:
@@ -155,6 +157,7 @@ address-pools:
 							ASN:      "example.com/peer-asn",
 							Addr:     "example.com/peer-address",
 							Port:     "example.com/peer-port",
+							SrcAddr:  "example.com/source-address",
 							HoldTime: "example.com/hold-time",
 							RouterID: "example.com/router-id",
 						},
@@ -165,6 +168,7 @@ address-pools:
 							ASN:      "example.com/peer-asn",
 							Addr:     "example.com/peer-address",
 							Port:     "example.com/peer-port",
+							SrcAddr:  "example.com/source-address",
 							HoldTime: "example.com/hold-time",
 							RouterID: "example.com/router-id",
 						},
