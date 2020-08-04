@@ -485,8 +485,8 @@ func parseNodePeer(l log.Logger, pad *config.PeerAutodiscovery, anns labels.Set,
 
 	// Hardcoded defaults. Used only if a parameter isn't specified in the peer
 	// autodiscovery defaults and also not in annotations/labels.
-	peerPort = 179
-	holdTime = 90 * time.Second
+	peerPort = config.DefautBGPPeerPort
+	holdTime = config.DefaultBGPHoldTime * time.Second
 
 	// Method called with a nil or empty peer autodiscovery.
 	if pad == nil {
