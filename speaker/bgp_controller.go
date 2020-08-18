@@ -24,6 +24,7 @@ import (
 	"reflect"
 	"sort"
 	"strconv"
+	"sync"
 	"time"
 
 	"go.universe.tf/metallb/internal/bgp"
@@ -46,6 +47,7 @@ type bgpController struct {
 	nodeLabels      labels.Set
 	cfg             *config.Config
 	peers           []*peer
+	peersLock       sync.Mutex
 	svcAds          map[string][]*bgp.Advertisement
 }
 
@@ -135,6 +137,9 @@ func (c *bgpController) syncPeers(l log.Logger) error {
 	if cfg == nil {
 		return nil
 	}
+
+	c.peersLock.Lock()
+	defer c.peersLock.Unlock()
 
 	newPeers := make([]*peer, 0, len(cfg.Peers))
 newPeers:
@@ -420,6 +425,9 @@ type statusPeer struct {
 func (c *bgpController) StatusHandler() func(w http.ResponseWriter, r *http.Request) {
 	return func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
+
+		c.peersLock.Lock()
+		defer c.peersLock.Unlock()
 
 		// Copy peers slice. We want to redact BGP passwords without modifying
 		// the actual peers.
