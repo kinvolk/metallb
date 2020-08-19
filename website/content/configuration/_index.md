@@ -249,8 +249,8 @@ clusters automatically in API-driven bare metal environments.
 Peer autodiscovery may be used in conjunction with static peer configuration.
 While it probably doesn't make sense to have the same BGP peer both configured
 statically and discovered dynamically, in case the BGP configuration of a node
-peer matches a statically-configured peer on the same node, the static
-configuration takes precedence and the node peer is ignored.
+peer matches a statically-configured peer on the same node, the node peer takes
+takes precedence and the static peer is ignored.
 {{% /notice %}}
 
 MetalLB discovers node peers by looking for
