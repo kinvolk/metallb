@@ -175,21 +175,29 @@ newPeers:
 	c.peers = newPeers
 
 	if np := c.discoverNodePeer(l); np != nil {
-		// Add node peer to slice only if no identical peer exists with a node
-		// selector that matches this node.
 		if len(c.peers) == 0 {
+			// No peers configured.
 			c.peers = append(c.peers, np)
 		} else {
-			var exists bool
-			for _, p := range c.peers {
+			// If a static peer would result in the same BGP session as the
+			// node peer on this node, keep the index of the static peer.
+			identical := -1
+			for i, p := range c.peers {
 				if isSameSession(np.Cfg, p.Cfg, c.nodeLabels) {
-					exists = true
+					identical = i
 					break
 				}
 			}
 
-			if !exists {
+			if identical == -1 {
+				// Node peer doesn't conflict with a static peer - add node
+				// peer to slice.
 				c.peers = append(c.peers, np)
+			} else {
+				// Node peer conflicts with a static peer - drop the static
+				// peer and keep the node peer.
+				oldPeers = append(oldPeers, c.peers[identical])
+				c.peers[identical] = np
 			}
 		}
 	}

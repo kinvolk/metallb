@@ -1715,14 +1715,7 @@ func TestNodePeers(t *testing.T) {
 				PeerAutodiscovery: pad,
 			},
 			wantPeers: []*peer{
-				{Cfg: &config.Peer{
-					MyASN:         nodePeer.MyASN,
-					ASN:           nodePeer.ASN,
-					Addr:          nodePeer.Addr,
-					Port:          nodePeer.Port,
-					HoldTime:      nodePeer.HoldTime,
-					NodeSelectors: []labels.Selector{labels.Everything()},
-				}},
+				{Cfg: nodePeer},
 				{Cfg: p3},
 			},
 		},
@@ -1745,14 +1738,7 @@ func TestNodePeers(t *testing.T) {
 				PeerAutodiscovery: pad,
 			},
 			wantPeers: []*peer{
-				{Cfg: &config.Peer{
-					MyASN:         nodePeer.MyASN,
-					ASN:           nodePeer.ASN,
-					Addr:          nodePeer.Addr,
-					Port:          nodePeer.Port,
-					HoldTime:      nodePeer.HoldTime,
-					NodeSelectors: []labels.Selector{labels.Everything()},
-				}},
+				{Cfg: nodePeer},
 			},
 		},
 		{
