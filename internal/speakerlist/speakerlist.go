@@ -27,9 +27,16 @@ import (
 
 // SpeakerList represents a list of healthy speakers.
 type SpeakerList struct {
-	l         gokitlog.Logger
-	client    *k8s.Client
-	stopCh    chan struct{}
+	l      gokitlog.Logger
+	client *k8s.Client
+
+	// A channel callers can use to stop the SpeakerList.
+	stopCh chan struct{}
+	// A channel SpeakerList uses to stop child goroutines.
+	childrenStopCh chan struct{}
+	// A WaitGroup for tracking child goroutines.
+	childrenWG sync.WaitGroup
+
 	namespace string
 	labels    string
 
@@ -45,10 +52,11 @@ type SpeakerList struct {
 // New creates a new SpeakerList and returns a pointer to it.
 func New(logger gokitlog.Logger, nodeName, bindAddr, bindPort, secret, namespace, labels string, stopCh chan struct{}) (*SpeakerList, error) {
 	sl := SpeakerList{
-		l:         logger,
-		stopCh:    stopCh,
-		namespace: namespace,
-		labels:    labels,
+		l:              logger,
+		stopCh:         stopCh,
+		childrenStopCh: make(chan struct{}),
+		namespace:      namespace,
+		labels:         labels,
 	}
 
 	if namespace == "" || labels == "" || bindAddr == "" {
@@ -143,24 +151,28 @@ func (sl *SpeakerList) Start(client *k8s.Client) {
 	sl.mlSpeakerIPs = iplist
 	sl.mlMux.Unlock()
 
-	// Update mlSpeakerIPs in the background.
-	go sl.updateSpeakerIPs()
+	sl.childrenWG.Add(3)
 
-	go sl.memberlistWatchEvents()
-	go sl.joinMembers()
+	// Update mlSpeakerIPs in the background.
+	go sl.updateSpeakerIPs(sl.childrenStopCh)
+	go sl.memberlistWatchEvents(sl.childrenStopCh)
+	go sl.joinMembers(sl.childrenStopCh)
 }
 
 // updateSpeakerIPs runs forever updating the sl.mlSpeakerIPs slice with the
 // IPs of all the speaker pods. As this queries the API server, it waits at
 // least 5 minutes between queries, to avoid self-induced API server DoS (should
 // be trated with care).
-func (sl *SpeakerList) updateSpeakerIPs() {
+func (sl *SpeakerList) updateSpeakerIPs(stop <-chan struct{}) {
+	defer sl.childrenWG.Done()
+
 	for {
 		// This either stops the loop or makes sure to wait at least 5
 		// minutes before making another call to sl.mlSpeakers(), which
 		// queries the API server.
 		select {
-		case <-sl.stopCh:
+		case <-stop:
+			sl.l.Log("op", "shutdown", "msg", "stopping updateSpeakerIPs")
 			return
 		case <-time.After(5 * time.Minute):
 			// This blocks until the API server responds.
@@ -198,16 +210,19 @@ func (sl *SpeakerList) mlSpeakers() ([]string, error) {
 	return iplist, nil
 }
 
-func (sl *SpeakerList) joinMembers() {
+func (sl *SpeakerList) joinMembers(stop <-chan struct{}) {
 	// Every one minute, try to rejoin.
 	// This will join nodes that leave the cluster only for a few seconds every 1
 	// minute, while discovering new IPs (updated by sl.speakersIPsLoop()) might
 	// take a while longer
 	ticker := time.NewTicker(1 * time.Minute)
 
+	defer sl.childrenWG.Done()
+
 	for {
 		select {
-		case <-sl.stopCh:
+		case <-stop:
+			sl.l.Log("op", "shutdown", "msg", "stopping joinMembers")
 			return
 		case <-ticker.C:
 			sl.mlJoin()
@@ -295,6 +310,11 @@ func (sl *SpeakerList) Stop() {
 		return
 	}
 
+	sl.l.Log("op", "shutdown", "msg", "stopping child goroutines")
+	close(sl.childrenStopCh)
+	sl.childrenWG.Wait()
+	sl.l.Log("op", "shutdown", "msg", "child goroutines stopped")
+
 	sl.l.Log("op", "shutdown", "msg", "leaving memberlist cluster")
 	err := sl.ml.Leave(time.Second)
 	sl.l.Log("op", "shutdown", "msg", "left memberlist cluster", "error", err)
@@ -306,13 +326,16 @@ func event2String(e memberlist.NodeEventType) string {
 	return []string{"NodeJoin", "NodeLeave", "NodeUpdate"}[e]
 }
 
-func (sl *SpeakerList) memberlistWatchEvents() {
+func (sl *SpeakerList) memberlistWatchEvents(stop <-chan struct{}) {
+	defer sl.childrenWG.Done()
+
 	for {
 		select {
 		case e := <-sl.mlEventCh:
 			sl.l.Log("msg", "node event - forcing sync", "node addr", e.Node.Addr, "node name", e.Node.Name, "node event", event2String(e.Event))
 			sl.client.ForceSync()
-		case <-sl.stopCh:
+		case <-stop:
+			sl.l.Log("op", "shutdown", "msg", "stopping memberlistWatchEvents")
 			return
 		}
 	}
