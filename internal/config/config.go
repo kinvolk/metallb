@@ -58,10 +58,10 @@ type peer struct {
 }
 
 type peerAutodiscovery struct {
-	Defaults        *peerAutodiscoveryDefaults `yaml:"defaults"`
-	NodeSelectors   []nodeSelector             `yaml:"node-selectors"`
-	FromAnnotations *peerAutodiscoveryMapping  `yaml:"from-annotations"`
-	FromLabels      *peerAutodiscoveryMapping  `yaml:"from-labels"`
+	Defaults        *peerAutodiscoveryDefaults  `yaml:"defaults"`
+	NodeSelectors   []nodeSelector              `yaml:"node-selectors"`
+	FromAnnotations []*peerAutodiscoveryMapping `yaml:"from-annotations"`
+	FromLabels      []*peerAutodiscoveryMapping `yaml:"from-labels"`
 }
 
 type peerAutodiscoveryDefaults struct {
@@ -202,11 +202,14 @@ type PeerAutodiscovery struct {
 	Defaults *PeerAutodiscoveryDefaults
 	// FromAnnotations tells MetalLB to retrieve BGP peering configuration for
 	// a node by looking up specific annotations on the corresponding Node
-	// object.
-	FromAnnotations *PeerAutodiscoveryMapping
+	// object. Multiple mappings can be specified in order to discover multiple
+	// BGP peers.
+	FromAnnotations []*PeerAutodiscoveryMapping
 	// FromLabels tells MetalLB to retrieve BGP peering configuration for
 	// a node by looking up specific labels on the corresponding Node object.
-	FromLabels *PeerAutodiscoveryMapping
+	// Multiple mappings can be specified in order to discover multiple BGP
+	// peers.
+	FromLabels []*PeerAutodiscoveryMapping
 	// NodeSelectors indicates the nodes for which peer autodiscovery should be
 	// enabled. Autodiscovery is performed only for nodes whose label set
 	// matches the specified selectors. When no selectors are specified,
@@ -432,20 +435,20 @@ func parsePeer(p peer) (*Peer, error) {
 // parsePeerAutodiscovery parses peer autodiscovery configuration, constructs
 // a PeerAutodiscovery and returns a pointer to it.
 func parsePeerAutodiscovery(p peerAutodiscovery) (*PeerAutodiscovery, error) {
-	pad := &PeerAutodiscovery{}
+	pad := &PeerAutodiscovery{
+		Defaults: &PeerAutodiscoveryDefaults{},
+	}
 
 	if p.FromAnnotations == nil && p.FromLabels == nil {
 		return nil, errors.New("missing from-annotations or from-labels")
 	}
 
 	if p.Defaults != nil {
-		pad.Defaults = &PeerAutodiscoveryDefaults{
-			ASN:      p.Defaults.ASN,
-			MyASN:    p.Defaults.MyASN,
-			Address:  net.ParseIP(p.Defaults.Address),
-			Port:     p.Defaults.Port,
-			RouterID: net.ParseIP(p.Defaults.RouterID),
-		}
+		pad.Defaults.ASN = p.Defaults.ASN
+		pad.Defaults.MyASN = p.Defaults.MyASN
+		pad.Defaults.Address = net.ParseIP(p.Defaults.Address)
+		pad.Defaults.Port = p.Defaults.Port
+		pad.Defaults.RouterID = net.ParseIP(p.Defaults.RouterID)
 
 		if p.Defaults.HoldTime != "" {
 			ht, err := ParseHoldTime(p.Defaults.HoldTime)
@@ -457,24 +460,28 @@ func parsePeerAutodiscovery(p peerAutodiscovery) (*PeerAutodiscovery, error) {
 	}
 
 	if p.FromAnnotations != nil {
-		pad.FromAnnotations = &PeerAutodiscoveryMapping{
-			ASN:      p.FromAnnotations.ASN,
-			Addr:     p.FromAnnotations.Addr,
-			HoldTime: p.FromAnnotations.HoldTime,
-			MyASN:    p.FromAnnotations.MyASN,
-			Port:     p.FromAnnotations.Port,
-			RouterID: p.FromAnnotations.RouterID,
+		for _, pam := range p.FromAnnotations {
+			pad.FromAnnotations = append(pad.FromAnnotations, &PeerAutodiscoveryMapping{
+				ASN:      pam.ASN,
+				Addr:     pam.Addr,
+				HoldTime: pam.HoldTime,
+				MyASN:    pam.MyASN,
+				Port:     pam.Port,
+				RouterID: pam.RouterID,
+			})
 		}
 	}
 
 	if p.FromLabels != nil {
-		pad.FromLabels = &PeerAutodiscoveryMapping{
-			ASN:      p.FromLabels.ASN,
-			Addr:     p.FromLabels.Addr,
-			HoldTime: p.FromLabels.HoldTime,
-			MyASN:    p.FromLabels.MyASN,
-			Port:     p.FromLabels.Port,
-			RouterID: p.FromLabels.RouterID,
+		for _, pam := range p.FromLabels {
+			pad.FromLabels = append(pad.FromLabels, &PeerAutodiscoveryMapping{
+				ASN:      pam.ASN,
+				Addr:     pam.Addr,
+				HoldTime: pam.HoldTime,
+				MyASN:    pam.MyASN,
+				Port:     pam.Port,
+				RouterID: pam.RouterID,
+			})
 		}
 	}
 
@@ -667,58 +674,33 @@ func isIPv6(ip net.IP) bool {
 
 // validatePeerAutodiscovery verifies that peer autodiscovery config is
 // specified for all required BGP params, or that default values are in place.
-//
-// Local ASN and peer ASN can be specified in annotations, labels or defaults.
-// Peer address can be specified in annotations or labels.
 func validatePeerAutodiscovery(p PeerAutodiscovery) error {
-	var localASNOK bool
-	var peerASNOK bool
-	var peerAddressOK bool
-
-	if d := p.Defaults; d != nil {
-		if d.MyASN != 0 {
-			localASNOK = true
-		}
-		if d.ASN != 0 {
-			peerASNOK = true
-		}
-		if d.Address != nil {
-			peerAddressOK = true
+	if p.FromAnnotations != nil {
+		for i, m := range p.FromAnnotations {
+			if m.MyASN == "" && p.Defaults.MyASN == 0 {
+				return fmt.Errorf("peer autodiscovery annotations mapping %d: local ASN missing and no default specified", i)
+			}
+			if m.ASN == "" && p.Defaults.ASN == 0 {
+				return fmt.Errorf("peer autodiscovery annotations mapping %d: peer ASN missing and no default specified", i)
+			}
+			if m.Addr == "" && p.Defaults.Address == nil {
+				return fmt.Errorf("peer autodiscovery annotations mapping %d: peer address missing and no default specified", i)
+			}
 		}
 	}
 
-	if a := p.FromAnnotations; a != nil {
-		if a.MyASN != "" {
-			localASNOK = true
+	if p.FromLabels != nil {
+		for i, m := range p.FromLabels {
+			if m.MyASN == "" && p.Defaults.MyASN == 0 {
+				return fmt.Errorf("peer autodiscovery labels mapping %d: local ASN missing and no default specified", i)
+			}
+			if m.ASN == "" && p.Defaults.ASN == 0 {
+				return fmt.Errorf("peer autodiscovery labels mapping %d: peer ASN missing and no default specified", i)
+			}
+			if m.Addr == "" && p.Defaults.Address == nil {
+				return fmt.Errorf("peer autodiscovery labels mapping %d: peer address missing and no default specified", i)
+			}
 		}
-		if a.ASN != "" {
-			peerASNOK = true
-		}
-		if a.Addr != "" {
-			peerAddressOK = true
-		}
-	}
-
-	if l := p.FromLabels; l != nil {
-		if l.MyASN != "" {
-			localASNOK = true
-		}
-		if l.ASN != "" {
-			peerASNOK = true
-		}
-		if l.Addr != "" {
-			peerAddressOK = true
-		}
-	}
-
-	if !localASNOK {
-		return errors.New("local ASN mapping missing and no default specified")
-	}
-	if !peerASNOK {
-		return errors.New("peer ASN mapping missing and no default specified")
-	}
-	if !peerAddressOK {
-		return errors.New("peer address mapping missing")
 	}
 
 	return nil

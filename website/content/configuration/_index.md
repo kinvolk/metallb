@@ -238,7 +238,7 @@ In addition to configuring BGP peers statically using the `peers` configuration
 section, MetalLB supports peer autodiscovery using node annotations/labels.
 Peers configured this way are called **node peers** because unlike
 statically-configured peers, node peers are always bound to a specific
-Kubernetes node. A node can only have one node peer at a time.
+Kubernetes node. Multiple node peers can be discovered per node.
 
 Peer autodiscovery is useful in cases where it is undesirable or impossible to
 maintain a static list of peers in the ConfigMap manually. It allows load
@@ -273,7 +273,7 @@ data:
       - 198.51.100.0/24
     peer-autodiscovery:
       from-annotations:
-        my-asn: example.com/my-asn
+      - my-asn: example.com/my-asn
         peer-asn: example.com/peer-asn
         peer-address: example.com/peer-address
 ```
@@ -302,9 +302,38 @@ is that we use `from-lables` in place of `from-annotations`:
 ```yaml
 peer-autodiscovery:
   from-labels:
-    my-asn: example.com/my-asn
+  - my-asn: example.com/my-asn
     peer-asn: example.com/peer-asn
     peer-address: example.com/peer-address
+```
+
+Multiple node peers can be discovered by specifying multiple sets of
+annotations or labels under `from-annotations` or `from-labels`, respectively:
+
+```yaml
+peer-autodiscovery:
+  from-annotations:
+  - my-asn: example.com/p1-my-asn
+    peer-asn: example.com/p1-peer-asn
+    peer-address: example.com/p1-peer-address
+  - my-asn: example.com/p2-my-asn
+    peer-asn: example.com/p2-peer-asn
+    peer-address: example.com/p2-peer-address
+```
+
+The `Node` object can then have BGP configurations for multiple peers:
+
+```yaml
+apiVersion: v1
+kind: Node
+metadata:
+  annotations:
+    example.com/p1-my-asn: 64500
+    example.com/p1-peer-asn: 64501
+    example.com/p1-peer-address: 10.0.0.3
+    example.com/p2-my-asn: 64500
+    example.com/p2-peer-asn: 64501
+    example.com/p2-peer-address: 10.0.0.4
 ```
 
 {{% notice note %}}
@@ -316,7 +345,7 @@ in environments where BGP authentication isn't configured.
 
 Setting the right annotations/labels is **out of scope** for MetalLB. `Node`
 objects can be annotated or labeled in a variety of ways, and it is assumed
-that there is some external mechanisms that puts the BGP configuration in
+that there is some external mechanism which puts the BGP configuration in
 annotations/labels for MetalLB to consume. Following are some common examples
 of such mechanisms:
 
@@ -339,18 +368,9 @@ peer-autodiscovery:
 
 Default values are useful in cases where some BGP parameters are common for all
 node peers and therefore should be configured statically. For example, it is
-likely that ASNs be the same for all the peers on a given cluster.
-
-MetalLB reads BGP configuration for node peers using the following order of
-precedence:
-
-1.  Annotations
-2.  Labels
-3.  Defaults
-
-This means that if the same BGP configuration parameter is specified using both
-an annotation and a label, the value from the annotation is used. A default
-value is used only if no relevant annotation or label is specified.
+likely that ASNs be the same for all the peers on a given cluster. A value
+read from an annotation or a label overrides the default value for the same BGP
+parameter.
 
 ## Advanced address pool configuration
 

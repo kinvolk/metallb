@@ -142,9 +142,36 @@ func (c *bgpController) syncPeers(l log.Logger) error {
 	c.peersLock.Lock()
 	defer c.peersLock.Unlock()
 
+	// Merge static peers and discovered peers into a single slice representing
+	// the desired set of peers while ensuring we don't have two peers which
+	// would result in the same BGP session.
+	var wantPeers []*config.Peer
+	for _, p := range append(cfg.Peers, c.discoverNodePeers(l)...) {
+		var duplicate bool
+		for _, ep := range wantPeers {
+			if isSameSession(ep, p, c.nodeLabels) {
+				l.Log(
+					"event", "peerSkipped",
+					"localASN", p.MyASN,
+					"peerASN", p.ASN,
+					"peerAddress", p.Addr,
+					"port", p.Port,
+					"holdTime", p.HoldTime,
+					"routerID", p.RouterID,
+					"msg", fmt.Sprintf("skipping peer to avoid a duplicate BGP session to %s:%d", p.Addr, p.Port),
+				)
+				duplicate = true
+				break
+			}
+		}
+		if !duplicate {
+			wantPeers = append(wantPeers, p)
+		}
+	}
+
 	newPeers := make([]*peer, 0, len(cfg.Peers))
 newPeers:
-	for _, p := range cfg.Peers {
+	for _, p := range wantPeers {
 		for i, ep := range c.peers {
 			if ep == nil {
 				continue
@@ -173,34 +200,6 @@ newPeers:
 
 	oldPeers := c.peers
 	c.peers = newPeers
-
-	if np := c.discoverNodePeer(l); np != nil {
-		if len(c.peers) == 0 {
-			// No peers configured.
-			c.peers = append(c.peers, np)
-		} else {
-			// If a static peer would result in the same BGP session as the
-			// node peer on this node, keep the index of the static peer.
-			identical := -1
-			for i, p := range c.peers {
-				if isSameSession(np.Cfg, p.Cfg, c.nodeLabels) {
-					identical = i
-					break
-				}
-			}
-
-			if identical == -1 {
-				// Node peer doesn't conflict with a static peer - add node
-				// peer to slice.
-				c.peers = append(c.peers, np)
-			} else {
-				// Node peer conflicts with a static peer - drop the static
-				// peer and keep the node peer.
-				oldPeers = append(oldPeers, c.peers[identical])
-				c.peers[identical] = np
-			}
-		}
-	}
 
 	for _, p := range oldPeers {
 		if p == nil {
@@ -243,35 +242,88 @@ func (c *bgpController) updatePeers(l log.Logger) error {
 	return nil
 }
 
-// discoverNodePeer attempts to create a BGP peer from node annotations and/or
-// labels if peer autodiscovery is configured. If a peer is successfully
-// discovered, a pointer to it is returned.
-func (c *bgpController) discoverNodePeer(l log.Logger) *peer {
-	pad := c.cfg.PeerAutodiscovery
+// discoverNodePeers attempts to create BGP peer configurations from node
+// annotations and/or labels if peer autodiscovery is configured. Any
+// discovered peer configs are returned, and a zero-length slice is returned
+// otherwise. Duplicate peer configs are discarded.
+func (c *bgpController) discoverNodePeers(l log.Logger) []*config.Peer {
+	discovered := []*config.Peer{}
 
+	pad := c.cfg.PeerAutodiscovery
 	if pad == nil {
 		l.Log("op", "discoverNodePeer", "msg", "peer autodiscovery disabled")
-		return nil
+		return discovered
 	}
 
 	// If the node labels don't match any peer autodiscovery node selector, we
 	// shouldn't try to discover peers for this node.
 	if !selectorMatches(c.nodeLabels, pad.NodeSelectors) {
-		// Peer autodiscovery is disabled for this node. If a node peer exists
-		// for this node, remove it.
 		l.Log("op", "discoverNodePeer", "msg", "node labels don't match autodiscovery selectors")
-		return nil
+		return discovered
 	}
 
-	// Parse (or re-parse) node peer configuration from the Node object.
-	np, err := parseNodePeer(l, pad, c.nodeAnnotations, c.nodeLabels)
+	// We need to limit any discovered peers to the relevant node only, so
+	// ensure we have a valid hostname label on the Node object.
+	h := c.nodeLabels[v1.LabelHostname]
+	if h == "" {
+		l.Log("op", "discoverNodePeer", "msg", fmt.Sprintf("label %s not found on node", v1.LabelHostname))
+		return discovered
+	}
+	selector, err := labels.Parse(fmt.Sprintf("%s=%s", v1.LabelHostname, h))
 	if err != nil {
-		// Node has invalid/partial/missing peer config.
-		l.Log("op", "discoverNodePeer", "error", err, "msg", "no peer discovered")
-		return nil
+		l.Log("op", "discoverNodePeer", "msg", fmt.Sprintf("parsing node selector: %v", err))
+		return discovered
 	}
 
-	return np
+	// Parse node peer configuration from annotations.
+	if pad.FromAnnotations != nil {
+		for _, pam := range pad.FromAnnotations {
+			np, err := parseNodePeer(l, pam, pad.Defaults, c.nodeAnnotations)
+			if err != nil {
+				l.Log("op", "discoverNodePeer", "error", err, "msg", "no peer discovered", "mappingType", "fromAnnotations", "mapping", pam)
+				continue
+			}
+			if peerConfigExists(discovered, np) {
+				l.Log("op", "discoverNodePeer", "error", err, "msg", "duplicate peer discovered", "mappingType", "fromAnnotations", "mapping", pam)
+			} else {
+				discovered = append(discovered, np)
+			}
+		}
+	}
+
+	// Parse node peer configuration from labels.
+	if pad.FromLabels != nil {
+		for _, pam := range pad.FromLabels {
+			np, err := parseNodePeer(l, pam, pad.Defaults, c.nodeLabels)
+			if err != nil {
+				l.Log("op", "discoverNodePeer", "error", err, "msg", "no peer discovered", "mappingType", "fromLabels", "mapping", pam)
+				continue
+			}
+			if peerConfigExists(discovered, np) {
+				l.Log("op", "discoverNodePeer", "error", err, "msg", "duplicate peer discovered", "mappingType", "fromLabels", "mapping", pam)
+			} else {
+				discovered = append(discovered, np)
+			}
+		}
+	}
+
+	// Limit discovered peers to the relevant node only.
+	for _, p := range discovered {
+		p.NodeSelectors = []labels.Selector{selector}
+	}
+
+	return discovered
+}
+
+// peerConfigExists returns true if peer config p exists in slice s.
+func peerConfigExists(s []*config.Peer, p *config.Peer) bool {
+	for _, ep := range s {
+		if reflect.DeepEqual(ep, p) {
+			return true
+		}
+	}
+
+	return false
 }
 
 func (c *bgpController) syncBGPSessions(l log.Logger, peers []*peer) (needUpdateAds int, errs int) {
@@ -477,10 +529,15 @@ func (c *bgpController) StatusHandler() func(w http.ResponseWriter, r *http.Requ
 	}
 }
 
-// parseNodePeer attempts to construct a BGP peer from information conveyed
-// in node annotations and labels using the specified autodiscovery
-// configuration.
-func parseNodePeer(l log.Logger, pad *config.PeerAutodiscovery, anns labels.Set, ls labels.Set) (*peer, error) {
+// parseNodePeer attempts to construct a BGP peer configuration from
+// information conveyed in node annotations or labels using the given
+// autodiscovery mapping and defaults and a set of labels/annotations.
+func parseNodePeer(l log.Logger, pam *config.PeerAutodiscoveryMapping, d *config.PeerAutodiscoveryDefaults, ls labels.Set) (*config.Peer, error) {
+	// Method called with a nil or empty peer autodiscovery.
+	if pam == nil {
+		return nil, errors.New("nil peer autodiscovery mapping")
+	}
+
 	var (
 		myASN       uint32
 		peerASN     uint32
@@ -496,101 +553,57 @@ func parseNodePeer(l log.Logger, pad *config.PeerAutodiscovery, anns labels.Set,
 	peerPort = config.DefautBGPPeerPort
 	holdTime = config.DefaultBGPHoldTime * time.Second
 
-	// Method called with a nil or empty peer autodiscovery.
-	if pad == nil {
-		return nil, errors.New("nil peer autodiscovery")
-	}
-
-	// Set defaults. Parameter values read from labels/annotations override the
-	// values set here.
-	if pad.Defaults != nil {
-		if pad.Defaults.ASN != 0 {
-			peerASN = pad.Defaults.ASN
+	// Use user-provided defaults. Parameter values read from
+	// labels/annotations override the values set here.
+	if d != nil {
+		if d.ASN != 0 {
+			peerASN = d.ASN
 		}
-		if pad.Defaults.MyASN != 0 {
-			myASN = pad.Defaults.MyASN
+		if d.MyASN != 0 {
+			myASN = d.MyASN
 		}
-		if pad.Defaults.Address != nil {
-			peerAddr = pad.Defaults.Address
+		if d.Address != nil {
+			peerAddr = d.Address
 		}
-		if pad.Defaults.Port != 0 {
-			peerPort = pad.Defaults.Port
+		if d.Port != 0 {
+			peerPort = d.Port
 		}
-		if pad.Defaults.HoldTime != 0 {
-			holdTime = pad.Defaults.HoldTime
+		if d.HoldTime != 0 {
+			holdTime = d.HoldTime
 		}
 	}
 
-	if pad.FromLabels != nil {
-		for k, v := range ls {
-			switch k {
-			case pad.FromLabels.MyASN:
-				asn, err := strconv.ParseUint(v, 10, 32)
-				if err != nil {
-					return nil, fmt.Errorf("parsing local ASN: %v", err)
-				}
-				myASN = uint32(asn)
-			case pad.FromLabels.ASN:
-				asn, err := strconv.ParseUint(v, 10, 32)
-				if err != nil {
-					return nil, fmt.Errorf("parsing peer ASN: %v", err)
-				}
-				peerASN = uint32(asn)
-			case pad.FromLabels.Addr:
-				peerAddr = net.ParseIP(v)
-				if peerAddr == nil {
-					return nil, fmt.Errorf("invalid peer IP %q", v)
-				}
-			case pad.FromLabels.Port:
-				port, err := strconv.ParseUint(v, 10, 16)
-				if err != nil {
-					return nil, fmt.Errorf("parsing peer port: %v", err)
-				}
-				peerPort = uint16(port)
-			case pad.FromLabels.HoldTime:
-				holdTimeRaw = v
-			case pad.FromLabels.RouterID:
-				routerID = net.ParseIP(v)
-				if routerID == nil {
-					return nil, fmt.Errorf("invalid router ID %q", v)
-				}
+	for k, v := range ls {
+		switch k {
+		case pam.MyASN:
+			asn, err := strconv.ParseUint(v, 10, 32)
+			if err != nil {
+				return nil, fmt.Errorf("parsing local ASN: %v", err)
 			}
-		}
-	}
-
-	if pad.FromAnnotations != nil {
-		for k, v := range anns {
-			switch k {
-			case pad.FromAnnotations.MyASN:
-				asn, err := strconv.ParseUint(v, 10, 32)
-				if err != nil {
-					return nil, fmt.Errorf("parsing local ASN: %v", err)
-				}
-				myASN = uint32(asn)
-			case pad.FromAnnotations.ASN:
-				asn, err := strconv.ParseUint(v, 10, 32)
-				if err != nil {
-					return nil, fmt.Errorf("parsing peer ASN: %v", err)
-				}
-				peerASN = uint32(asn)
-			case pad.FromAnnotations.Addr:
-				peerAddr = net.ParseIP(v)
-				if peerAddr == nil {
-					return nil, fmt.Errorf("invalid peer IP %q", v)
-				}
-			case pad.FromAnnotations.Port:
-				port, err := strconv.ParseUint(v, 10, 16)
-				if err != nil {
-					return nil, fmt.Errorf("parsing peer port: %v", err)
-				}
-				peerPort = uint16(port)
-			case pad.FromAnnotations.HoldTime:
-				holdTimeRaw = v
-			case pad.FromAnnotations.RouterID:
-				routerID = net.ParseIP(v)
-				if routerID == nil {
-					return nil, fmt.Errorf("invalid router ID %q", v)
-				}
+			myASN = uint32(asn)
+		case pam.ASN:
+			asn, err := strconv.ParseUint(v, 10, 32)
+			if err != nil {
+				return nil, fmt.Errorf("parsing peer ASN: %v", err)
+			}
+			peerASN = uint32(asn)
+		case pam.Addr:
+			peerAddr = net.ParseIP(v)
+			if peerAddr == nil {
+				return nil, fmt.Errorf("invalid peer IP %q", v)
+			}
+		case pam.Port:
+			port, err := strconv.ParseUint(v, 10, 16)
+			if err != nil {
+				return nil, fmt.Errorf("parsing peer port: %v", err)
+			}
+			peerPort = uint16(port)
+		case pam.HoldTime:
+			holdTimeRaw = v
+		case pam.RouterID:
+			routerID = net.ParseIP(v)
+			if routerID == nil {
+				return nil, fmt.Errorf("invalid router ID %q", v)
 			}
 		}
 	}
@@ -613,29 +626,15 @@ func parseNodePeer(l log.Logger, pad *config.PeerAutodiscovery, anns labels.Set,
 		holdTime = ht
 	}
 
-	// The peer is configured on a specific node object, so we want to create a
-	// BGP session only on that node.
-	h := ls[v1.LabelHostname]
-	if h == "" {
-		return nil, fmt.Errorf("label %s not found on node", v1.LabelHostname)
-	}
-	ns, err := labels.Parse(fmt.Sprintf("%s=%s", v1.LabelHostname, h))
-	if err != nil {
-		return nil, fmt.Errorf("parsing node selector: %v", err)
-	}
-
-	p := &peer{
-		Cfg: &config.Peer{
-			MyASN:         myASN,
-			ASN:           peerASN,
-			Addr:          peerAddr,
-			Port:          peerPort,
-			HoldTime:      holdTime,
-			RouterID:      routerID,
-			NodeSelectors: []labels.Selector{ns},
-			// BGP passwords aren't supported for node peers.
-			Password: "",
-		},
+	p := &config.Peer{
+		MyASN:    myASN,
+		ASN:      peerASN,
+		Addr:     peerAddr,
+		Port:     peerPort,
+		HoldTime: holdTime,
+		RouterID: routerID,
+		// BGP passwords aren't supported for node peers.
+		Password: "",
 	}
 
 	return p, nil
@@ -647,9 +646,6 @@ func parseNodePeer(l log.Logger, pad *config.PeerAutodiscovery, anns labels.Set,
 // Two configs would result in the same TCP session if the node selectors of
 // both a and b match the label set ls AND both the peer address and port are
 // identical between a and b.
-//
-// TODO: Consider allowing multiple sessions to the same destination IP with
-// different source IPs.
 func isSameSession(a *config.Peer, b *config.Peer, ls labels.Set) bool {
 	if !selectorMatches(ls, a.NodeSelectors) || !selectorMatches(ls, b.NodeSelectors) {
 		return false

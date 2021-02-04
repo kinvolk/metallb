@@ -115,7 +115,7 @@ data:
       # Tells MetalLB to discover BGP peers by looking for annotations on the
       # Node object. One of 'from-annotations', 'from-labels' must be specified.
       from-annotations:
-        my-asn: example.com/my-asn
+      - my-asn: example.com/my-asn
         peer-asn: example.com/peer-asn
         peer-address: example.com/peer-address
         peer-port: example.com/peer-port
@@ -125,7 +125,7 @@ data:
       # Tells MetalLB to discover BGP peers by looking for labels on the Node
       # object. One of 'from-annotations', 'from-labels' must be specified.
       from-labels:
-        my-asn: example.com/my-asn
+      - my-asn: example.com/my-asn
         peer-asn: example.com/peer-asn
         peer-address: example.com/peer-address
         peer-port: example.com/peer-port
