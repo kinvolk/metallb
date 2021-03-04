@@ -96,7 +96,12 @@ def build(ctx, binaries, architectures, registry="quay.io", repo="metallb", tag=
                     branch=branch),
                 env=env,
                 echo=True)
-            run("docker build "
+            # When building in an environment in which `umask` masks out '+x'
+            # for others and running as non root, it won't be possible to
+            # execute. Make sure all can execute, just in case.
+            run("chmod a+x build/{arch}/{bin}/{bin}".format(arch=arch, bin=bin), echo=True)
+            run("docker buildx build "
+                "--platform linux/{arch} "
                 "-t {registry}/{repo}/{bin}:{tag}-{arch} "
                 "-f {bin}/Dockerfile build/{arch}/{bin}".format(
                     registry=registry,
